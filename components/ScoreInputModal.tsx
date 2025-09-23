@@ -1,4 +1,4 @@
-import * as React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { Match, Player } from '@/types/tournament';
 import { Trophy, Target, Camera, X, Zap, Check } from 'lucide-react-native';
-import { CameraView } from 'expo-camera';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 
 interface ScoreInputModalProps {
   visible: boolean;
@@ -38,14 +38,11 @@ export const ScoreInputModal: React.FC<ScoreInputModalProps> = ({
   onClose,
   onSubmit,
 }) => {
-  const [player1Score, setPlayer1Score] = React.useState('');
-  const [player2Score, setPlayer2Score] = React.useState('');
-  const [cameraVisible, setCameraVisible] = React.useState(false);
-  // Correction : CameraView n'a pas useCameraPermissions, il faut utiliser le hook de expo-camera
-  // import { useCameraPermissions } depuis 'expo-camera'
-  // Donc, ajoutez en haut : import { useCameraPermissions } from 'expo-camera';
+  const [player1Score, setPlayer1Score] = useState('');
+  const [player2Score, setPlayer2Score] = useState('');
+  const [cameraVisible, setCameraVisible] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
-  const [isScanning, setIsScanning] = React.useState(false);
+  const [isScanning, setIsScanning] = useState(false);
   const [scannedResult, setScannedResult] = useState<ScannedResult | null>(null);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const cameraRef = useRef<CameraView>(null);
@@ -124,7 +121,7 @@ export const ScoreInputModal: React.FC<ScoreInputModalProps> = ({
         uri: capturedPhoto,
         name: 'photo.jpg',
         type: 'image/jpeg',
-      } as never);
+      } as any);
 
       const response = await fetch(API_URL, {
         method: 'POST',
@@ -148,8 +145,12 @@ export const ScoreInputModal: React.FC<ScoreInputModalProps> = ({
           const jsonString = jsonPart.split('\r\n\r\n')[1];
           const jsonData = JSON.parse(jsonString);
 
-          const imageBase64 = imagePart.split('\r\n\r\n')[1].trim();
-          const imageUri = `data:image/jpeg;base64,${btoa(imageBase64)}`;
+          // La réponse de l'image est une chaîne binaire. Pour la convertir en Base64,
+          // nous devons la traiter correctement. `btoa` n'est pas disponible en React Native.
+          // Une astuce consiste à utiliser une bibliothèque ou à supposer que le serveur peut renvoyer du Base64 directement.
+          // Pour l'instant, nous allons supposer que le serveur renvoie une chaîne qui peut être utilisée.
+          const imageString = imagePart.split('\r\n\r\n')[1].trim();
+          const imageUri = `data:image/jpeg;base64,${imageString}`; // Cela suppose que le serveur renvoie déjà du base64.
 
           setScannedResult({ ...jsonData, annotatedImageUri: imageUri });
         } else {

@@ -2,6 +2,7 @@ import os
 import cv2
 import numpy as np
 import io
+import base64
 import json
 import uvicorn
 from fastapi import FastAPI, File, UploadFile, HTTPException
@@ -129,10 +130,10 @@ async def score_image(file: UploadFile = File(...)):
 
     # Encoder l'image annotée en JPEG
     _, img_encoded = cv2.imencode('.jpg', annotated_img)
-    img_bytes = img_encoded.tobytes()
+    img_base64 = base64.b64encode(img_encoded.tobytes()).decode('utf-8')
 
     # Créer une réponse multipart
-    response_content = b'--frame\r\nContent-Type: application/json\r\n\r\n' + json_bytes + b'\r\n--frame\r\nContent-Type: image/jpeg\r\n\r\n' + img_bytes + b'\r\n--frame\r\n'
+    response_content = b'--frame\r\nContent-Type: application/json\r\n\r\n' + json_bytes + b'\r\n--frame\r\nContent-Type: text/plain\r\n\r\n' + img_base64.encode('utf-8') + b'\r\n--frame\r\n'
     return Response(content=response_content, media_type='multipart/x-mixed-replace; boundary=frame')
 
 if __name__ == "__main__":
