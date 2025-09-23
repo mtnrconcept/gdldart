@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import * as React from 'react';
 import {
   View,
   Text,
@@ -38,11 +38,14 @@ export const ScoreInputModal: React.FC<ScoreInputModalProps> = ({
   onClose,
   onSubmit,
 }) => {
-  const [player1Score, setPlayer1Score] = useState('');
-  const [player2Score, setPlayer2Score] = useState('');
-  const [cameraVisible, setCameraVisible] = useState(false);
-  const [permission, requestPermission] = CameraView.useCameraPermissions();
-  const [isScanning, setIsScanning] = useState(false);
+  const [player1Score, setPlayer1Score] = React.useState('');
+  const [player2Score, setPlayer2Score] = React.useState('');
+  const [cameraVisible, setCameraVisible] = React.useState(false);
+  // Correction : CameraView n'a pas useCameraPermissions, il faut utiliser le hook de expo-camera
+  // import { useCameraPermissions } depuis 'expo-camera'
+  // Donc, ajoutez en haut : import { useCameraPermissions } from 'expo-camera';
+  const [permission, requestPermission] = useCameraPermissions();
+  const [isScanning, setIsScanning] = React.useState(false);
   const [scannedResult, setScannedResult] = useState<ScannedResult | null>(null);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const cameraRef = useRef<CameraView>(null);
