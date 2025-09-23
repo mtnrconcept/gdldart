@@ -133,7 +133,7 @@ async def score_image(file: UploadFile = File(...)):
     img_base64 = base64.b64encode(img_encoded.tobytes()).decode('utf-8')
 
     # Créer une réponse multipart
-    response_content = b'--frame\r\nContent-Type: application/json\r\n\r\n' + json_bytes + b'\r\n--frame\r\nContent-Type: text/plain\r\n\r\n' + img_base64.encode('utf-8') + b'\r\n--frame\r\n'
+    response_content = b'--frame\r\nContent-Type: application/json\r\n\r\n' + json_bytes + b'\r\n--frame\r\nContent-Type: text/plain\r\n\r\n' + img_base64.encode('utf-8') + b'\r\n--frame--\r\n'
     return Response(content=response_content, media_type='multipart/x-mixed-replace; boundary=frame')
 
 if __name__ == "__main__":

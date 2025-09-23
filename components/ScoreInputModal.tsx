@@ -121,7 +121,7 @@ export const ScoreInputModal: React.FC<ScoreInputModalProps> = ({
         uri: capturedPhoto,
         name: 'photo.jpg',
         type: 'image/jpeg',
-      } as any);
+      } as never);
 
       const response = await fetch(API_URL, {
         method: 'POST',
@@ -139,18 +139,13 @@ export const ScoreInputModal: React.FC<ScoreInputModalProps> = ({
         const parts = text.split('--frame\r\n');
         
         const jsonPart = parts.find(p => p.includes('Content-Type: application/json'));
-        const imagePart = parts.find(p => p.includes('Content-Type: image/jpeg'));
+        const imagePart = parts.find(p => p.includes('Content-Type: text/plain')); // Changed to text/plain for base64
 
         if (jsonPart && imagePart) {
           const jsonString = jsonPart.split('\r\n\r\n')[1];
           const jsonData = JSON.parse(jsonString);
-
-          // La réponse de l'image est une chaîne binaire. Pour la convertir en Base64,
-          // nous devons la traiter correctement. `btoa` n'est pas disponible en React Native.
-          // Une astuce consiste à utiliser une bibliothèque ou à supposer que le serveur peut renvoyer du Base64 directement.
-          // Pour l'instant, nous allons supposer que le serveur renvoie une chaîne qui peut être utilisée.
-          const imageString = imagePart.split('\r\n\r\n')[1].trim();
-          const imageUri = `data:image/jpeg;base64,${imageString}`; // Cela suppose que le serveur renvoie déjà du base64.
+          const imageBase64String = imagePart.split('\r\n\r\n')[1].trim();
+          const imageUri = `data:image/jpeg;base64,${imageBase64String}`;
 
           setScannedResult({ ...jsonData, annotatedImageUri: imageUri });
         } else {
@@ -210,6 +205,7 @@ export const ScoreInputModal: React.FC<ScoreInputModalProps> = ({
               <TouchableOpacity style={styles.cameraActionButton} onPress={handleCloseCamera}>
                 <X size={32} color="#FFFFFF" />
               </TouchableOpacity>
+              {/* The shutter button was part of a duplicated block, it is now here */}
               <TouchableOpacity style={styles.shutterButton} onPress={takePicture} />
               <View style={{ width: 52 }} />
             </View>
@@ -352,6 +348,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 40,
     flexDirection: 'row',
+  },
+  // Style for camera controls was missing, now added
+  cameraControls: {
+    // This style block is no longer needed as the content was merged
   },
   cameraActionButton: {
     flexDirection: 'row',
