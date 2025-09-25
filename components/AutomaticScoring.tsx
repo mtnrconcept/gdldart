@@ -9,7 +9,8 @@ import {
   Alert,
 } from 'react-native';
 import { Match, Player } from '@/types/tournament';
-import { Target, Plus, Minus, RotateCcw, Trophy, X } from 'lucide-react-native';
+import { Target, Plus, Minus, RotateCcw, Trophy, X, Camera } from 'lucide-react-native';
+import { CameraDartDetection } from './CameraDartDetection';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -51,6 +52,7 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
   const [throwScores, setThrowScores] = useState<number[]>([0, 0, 0]);
   const [gameFinished, setGameFinished] = useState(false);
   const [winner, setWinner] = useState<Player | null>(null);
+  const [showCameraDetection, setShowCameraDetection] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -164,6 +166,76 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
     setThrowScores([0, 0, 0]);
   };
 
+  const handleCameraDartDetected = (score: number) => {
+    if (gameFinished || currentThrow >= 3) return;
+    addScore(score);
+  };
+
+  const handleCameraTurnComplete = (scores: number[]) => {
+    // Appliquer tous les scores du tour
+    const turnTotal = scores.reduce((sum, score) => sum + score, 0);
+    const currentPlayerScore = currentPlayer === 1 ? player1Score : player2Score;
+    const newScore = currentPlayerScore.currentScore - turnTotal;
+
+    // Vérifier si le score est valide
+    if (newScore < 0 || (gameMode === '501' && newScore === 1)) {
+      Alert.alert('Bust!', 'Score invalide. Le tour est annulé.');
+    } else if (newScore === 0) {
+      // Victoire !
+      const winningPlayer = currentPlayer === 1 ? match.player1! : match.player2!;
+      setWinner(winningPlayer);
+      setGameFinished(true);
+      
+      Alert.alert(
+        'Victoire !',
+        `${winningPlayer.name} a gagné !`,
+        [
+          {
+            text: 'Valider le match',
+            onPress: () => {
+              const finalPlayer1Score = currentPlayer === 1 ? 0 : player1Score.currentScore;
+              const finalPlayer2Score = currentPlayer === 2 ? 0 : player2Score.currentScore;
+              
+              onSubmit(winningPlayer, {
+                player1Score: gameMode === '501' ? 501 - finalPlayer1Score : 301 - finalPlayer1Score,
+                player2Score: gameMode === '501' ? 501 - finalPlayer2Score : 301 - finalPlayer2Score,
+              });
+            },
+          },
+        ]
+      );
+      return;
+    } else {
+      // Score valide, mettre à jour
+      const newThrows = [...currentPlayerScore.throws, ...scores];
+      const newTotalThrows = currentPlayerScore.totalThrows + scores.length;
+      const newAverage = newTotalThrows > 0 ? 
+        ((gameMode === '501' ? 501 : 301) - newScore) / (newTotalThrows / 3) : 0;
+
+      if (currentPlayer === 1) {
+        setPlayer1Score({
+          currentScore: newScore,
+          throws: newThrows,
+          totalThrows: newTotalThrows,
+          average: newAverage,
+        });
+      } else {
+        setPlayer2Score({
+          currentScore: newScore,
+          throws: newThrows,
+          totalThrows: newTotalThrows,
+          average: newAverage,
+        });
+      }
+    }
+
+    // Passer au joueur suivant
+    setCurrentPlayer(currentPlayer === 1 ? 2 : 1);
+    setCurrentThrow(0);
+    setThrowScores([0, 0, 0]);
+    setShowCameraDetection(false);
+  };
+
   const scoreButtons = [
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 25,
     22, 24, 26, 27, 28, 30, 32, 33, 34, 36, 38, 39, 40, 42, 45, 48, 50, 51, 54, 57, 60
@@ -246,6 +318,19 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
           </View>
         </View>
 
+        {/* Bouton caméra */}
+        {!gameFinished && (
+          <View style={styles.cameraContainer}>
+            <TouchableOpacity
+              style={styles.cameraButton}
+              onPress={() => setShowCameraDetection(true)}
+            >
+              <Camera size={20} color="#0F0F0F" />
+              <Text style={styles.cameraButtonText}>Détection Caméra</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Tour actuel */}
         {!gameFinished && (
           <View style={styles.currentTurnContainer}>
@@ -319,6 +404,17 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
           </View>
         )}
       </View>
+
+      {/* Détection par caméra */}
+      <CameraDartDetection
+        visible={showCameraDetection}
+        gameMode={gameMode}
+        onClose={() => setShowCameraDetection(false)}
+        onDartDetected={handleCameraDartDetected}
+        onTurnComplete={handleCameraTurnComplete}
+        currentPlayer={currentPlayer === 1 ? match.player1?.name || 'Joueur 1' : match.player2?.name || 'Joueur 2'}
+        maxDarts={3}
+      />
     </Modal>
   );
 };
@@ -525,6 +621,32 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   confirmButtonText: {
+    color: '#0F0F0F',
+  },
+  cameraContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  cameraButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#00FF41',
+    paddingVertical: 16,
+    borderRadius: 12,
+    gap: 8,
+    shadowColor: '#00FF41',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  cameraButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
     color: '#0F0F0F',
   },
 });
