@@ -8,18 +8,24 @@ import {
   Dimensions,
   Platform,
 } from 'react-native';
-import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Camera, RotateCcw, Target, Play, Pause, CircleCheck as CheckCircle } from 'lucide-react-native';
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+import type { DartDetectionResult } from '@/types/dartDetection';
+import { detectDarts, DartDetectionError } from '@/utils/dartDetection';
 
-interface DartDetection {
-  x: number;
-  y: number;
-  score: number;
-  sector: string;
-  confidence: number;
-}
+const DUPLICATE_DISTANCE_THRESHOLD = 32;
+
+const isSameDetection = (a: DartDetectionResult, b: DartDetectionResult) => {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  return distance <= DUPLICATE_DISTANCE_THRESHOLD && a.score === b.score;
+};
+
+
+
+
 
 interface CameraDartDetectionProps {
   visible: boolean;
@@ -42,13 +48,17 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
 }) => {
   const [permission, requestPermission] = useCameraPermissions();
   const [isDetecting, setIsDetecting] = useState(false);
-  const [detectedDarts, setDetectedDarts] = useState<DartDetection[]>([]);
+  const [detectedDarts, setDetectedDarts] = useState<DartDetectionResult[]>([]);
   const [currentDartCount, setCurrentDartCount] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [detectionError, setDetectionError] = useState<string | null>(null);
+  const [cameraLayout, setCameraLayout] = useState({ width: 0, height: 0 });
   const cameraRef = useRef<CameraView>(null);
   const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const detectionAbortController = useRef<AbortController | null>(null);
+  const lastDetectionErrorRef = useRef<string | null>(null);
   const currentDartCountRef = useRef(0);
-  const detectedDartsRef = useRef<DartDetection[]>([]);
+  const detectedDartsRef = useRef<DartDetectionResult[]>([]);
   const isProcessingRef = useRef(false);
 
 
@@ -59,6 +69,10 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
     return () => {
       if (detectionIntervalRef.current) {
         clearInterval(detectionIntervalRef.current);
+      }
+      if (detectionAbortController.current) {
+        detectionAbortController.current.abort();
+        detectionAbortController.current = null;
       }
     };
   }, [visible]);
@@ -83,9 +97,15 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
     setIsDetecting(false);
     setIsProcessing(false);
     isProcessingRef.current = false;
+    setDetectionError(null);
+    lastDetectionErrorRef.current = null;
     if (detectionIntervalRef.current) {
       clearInterval(detectionIntervalRef.current);
       detectionIntervalRef.current = null;
+    }
+    if (detectionAbortController.current) {
+      detectionAbortController.current.abort();
+      detectionAbortController.current = null;
     }
   };
 
@@ -97,72 +117,38 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
       }
     }
 
+    setDetectionError(null);
+    lastDetectionErrorRef.current = null;
     setIsDetecting(true);
   };
 
   const stopDetection = () => {
     setIsDetecting(false);
+    setIsProcessing(false);
+    isProcessingRef.current = false;
     if (detectionIntervalRef.current) {
       clearInterval(detectionIntervalRef.current);
       detectionIntervalRef.current = null;
     }
+    if (detectionAbortController.current) {
+      detectionAbortController.current.abort();
+      detectionAbortController.current = null;
+    }
   };
 
-  const analyzeDartboard = useCallback(async (base64Image: string, existingCount: number): Promise<DartDetection[]> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const existingDetections = detectedDartsRef.current.slice(0, existingCount);
-        const mockDetections: DartDetection[] = [...existingDetections];
+  const convertDetections = useCallback((detections: DartDetectionResult[]) => {
+    const { width: fallbackWidth, height: fallbackHeight } = Dimensions.get('window');
+    const width = cameraLayout.width || fallbackWidth;
+    const height = cameraLayout.height || fallbackHeight;
 
-        const targetCount = Math.min(
-          existingCount + Math.floor(Math.random() * 2),
-          maxDarts
-        );
+    return detections.map((dart) => {
+      const isNormalized = dart.x >= 0 && dart.x <= 1 && dart.y >= 0 && dart.y <= 1;
+      const x = isNormalized ? dart.x * width : dart.x;
+      const y = isNormalized ? dart.y * height : dart.y;
 
-        for (let i = existingCount; i < targetCount; i++) {
-          const scores = [20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 25, 50];
-          const multipliers = ['simple', 'double', 'triple'];
-
-          const baseScore = scores[Math.floor(Math.random() * scores.length)];
-          const multiplier = multipliers[Math.floor(Math.random() * multipliers.length)];
-
-          let finalScore = baseScore;
-          let sector = `${baseScore}`;
-
-          if (baseScore === 25) {
-            finalScore = 25;
-            sector = 'Bull simple';
-          } else if (baseScore === 50) {
-            finalScore = 50;
-            sector = 'Bull double';
-          } else {
-            switch (multiplier) {
-              case 'double':
-                finalScore = baseScore * 2;
-                sector = `Double ${baseScore}`;
-                break;
-              case 'triple':
-                finalScore = baseScore * 3;
-                sector = `Triple ${baseScore}`;
-                break;
-              default:
-                sector = `Simple ${baseScore}`;
-            }
-          }
-
-          mockDetections.push({
-            x: Math.random() * 300 + 50,
-            y: Math.random() * 300 + 50,
-            score: finalScore,
-            sector,
-            confidence: 0.85 + Math.random() * 0.15,
-          });
-        }
-
-        resolve(mockDetections);
-      }, 1000);
+      return { ...dart, x, y };
     });
-  }, [maxDarts]);
+  }, [cameraLayout]);
 
   const captureAndAnalyze = useCallback(async () => {
     if (!cameraRef.current || isProcessingRef.current) return;
@@ -170,51 +156,101 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
     setIsProcessing(true);
     isProcessingRef.current = true;
 
+    const controller = new AbortController();
+    if (detectionAbortController.current) {
+      detectionAbortController.current.abort();
+    }
+    detectionAbortController.current = controller;
+
     try {
       const photo = await cameraRef.current.takePictureAsync({
         quality: 0.8,
         base64: true,
+        skipProcessing: true,
       });
 
-      if (photo?.base64) {
-        const existingCount = detectedDartsRef.current.length;
-        const detections = await analyzeDartboard(photo.base64, existingCount);
-
-        if (detections.length > existingCount) {
-          const newDetections = detections.slice(existingCount);
-          const remainingSlots = Math.max(0, maxDarts - existingCount);
-          const dartsToAdd = newDetections.slice(0, remainingSlots);
-
-          if (dartsToAdd.length) {
-            setDetectedDarts(prev => {
-              const updated = [...prev, ...dartsToAdd];
-              detectedDartsRef.current = updated;
-              return updated;
-            });
-
-            const newCount = existingCount + dartsToAdd.length;
-            setCurrentDartCount(newCount);
-            currentDartCountRef.current = newCount;
-
-            dartsToAdd.forEach(dart => {
-              onDartDetected(dart.score);
-
-              Alert.alert(
-                'Flechette detectee !',
-                `Score: ${dart.score} points (${dart.sector})`,
-                [{ text: 'OK' }]
-              );
-            });
-          }
-        }
+      if (!photo?.base64) {
+        return;
       }
+
+      const remoteDetections = await detectDarts(photo.base64, { signal: controller.signal });
+      const mappedDetections = convertDetections(remoteDetections);
+
+      if (!mappedDetections.length) {
+        setDetectionError(null);
+        return;
+      }
+
+      const existing = detectedDartsRef.current;
+      const availableSlots = maxDarts - existing.length;
+
+      if (availableSlots <= 0) {
+        setDetectionError(null);
+        return;
+      }
+
+      const newDetections = mappedDetections.filter((candidate) =>
+        !existing.some((dart) => isSameDetection(dart, candidate))
+      );
+
+      if (!newDetections.length) {
+        setDetectionError(null);
+        return;
+      }
+
+      const dartsToAdd = newDetections.slice(0, availableSlots);
+
+      if (!dartsToAdd.length) {
+        return;
+      }
+
+      setDetectedDarts((prev) => {
+        const updated = [...prev, ...dartsToAdd];
+        detectedDartsRef.current = updated;
+        return updated;
+      });
+
+      const newCount = existing.length + dartsToAdd.length;
+      setCurrentDartCount(newCount);
+      currentDartCountRef.current = newCount;
+      setDetectionError(null);
+      lastDetectionErrorRef.current = null;
+
+      dartsToAdd.forEach((dart) => {
+        onDartDetected(dart.score);
+
+        Alert.alert(
+          'Fl\u00E9chette d\u00E9tect\u00E9e !',
+          'Score: ' + dart.score + ' points (' + dart.sector + ')',
+          [{ text: 'OK' }]
+        );
+      });
     } catch (error) {
-      console.error('Erreur lors de la capture:', error);
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
+
+      const message =
+        error instanceof DartDetectionError
+          ? error.message
+          : "Une erreur est survenue lors de l'analyse de l'image.";
+
+      if (lastDetectionErrorRef.current !== message) {
+        lastDetectionErrorRef.current = message;
+        Alert.alert('Erreur de d\u00E9tection', message);
+      }
+
+      setDetectionError(message);
+      console.error('Erreur lors de la d\u00E9tection de fl\u00E9chettes:', error);
     } finally {
       setIsProcessing(false);
       isProcessingRef.current = false;
+
+      if (detectionAbortController.current === controller) {
+        detectionAbortController.current = null;
+      }
     }
-  }, [analyzeDartboard, maxDarts, onDartDetected]);
+  }, [convertDetections, maxDarts, onDartDetected]);
 
   useEffect(() => {
     if (!isDetecting) {
@@ -239,9 +275,8 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
         detectionIntervalRef.current = null;
       }
     };
-  }, [isDetecting, maxDarts, captureAndAnalyze]);
+  }, [captureAndAnalyze, isDetecting, maxDarts]);
 
-  // Fonction simulee d'analyse d'image (a remplacer par l'integration reelle de deep-darts)
   const completeTurn = () => {
     const scores = detectedDarts.map(dart => dart.score);
     onTurnComplete(scores);
@@ -261,7 +296,7 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
   if (!permission) {
     return (
       <View style={styles.container}>
-        <Text style={styles.permissionText}>Chargement de la caméra...</Text>
+        <Text style={styles.permissionText}>Chargement de la camera...</Text>
       </View>
     );
   }
@@ -271,12 +306,12 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
       <View style={styles.container}>
         <View style={styles.permissionContainer}>
           <Camera size={48} color="#666666" />
-          <Text style={styles.permissionTitle}>Accès à la caméra requis</Text>
+          <Text style={styles.permissionTitle}>Acces a la camera requis</Text>
           <Text style={styles.permissionText}>
-            Pour détecter automatiquement les fléchettes, nous avons besoin d'accéder à votre caméra.
+            Pour detecter automatiquement les flechettes, nous avons besoin d'acceder a votre camera.
           </Text>
           <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
-            <Text style={styles.permissionButtonText}>Autoriser la caméra</Text>
+            <Text style={styles.permissionButtonText}>Autoriser la camera</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -294,7 +329,7 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Target size={24} color="#00FF41" />
-          <Text style={styles.headerTitle}>Détection Automatique</Text>
+          <Text style={styles.headerTitle}>Detection Automatique</Text>
         </View>
         <View style={styles.gameModeIndicator}>
           <Text style={styles.gameModeText}>{gameMode}</Text>
@@ -305,16 +340,20 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
       <View style={styles.playerInfo}>
         <Text style={styles.playerName}>Tour de {currentPlayer}</Text>
         <Text style={styles.dartCount}>
-          Fléchettes: {currentDartCount}/{maxDarts}
+          Flechettes: {currentDartCount}/{maxDarts}
         </Text>
       </View>
 
-      {/* Vue caméra */}
+      {/* Vue camera */}
       <View style={styles.cameraContainer}>
         <CameraView
           ref={cameraRef}
           style={styles.camera}
           facing="back"
+          onLayout={(event) => {
+            const { width, height } = event.nativeEvent.layout;
+            setCameraLayout({ width, height });
+          }}
         >
           {/* Overlay de la cible */}
           <View style={styles.targetOverlay}>
@@ -323,7 +362,7 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
             </View>
           </View>
 
-          {/* Fléchettes détectées */}
+          {/* Flechettes detectees */}
           {detectedDarts.map((dart, index) => (
             <View
               key={index}
@@ -349,9 +388,9 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
         </CameraView>
       </View>
 
-      {/* Scores détectés */}
+      {/* Scores detectes */}
       <View style={styles.scoresContainer}>
-        <Text style={styles.scoresTitle}>Scores détectés:</Text>
+        <Text style={styles.scoresTitle}>Scores detectes:</Text>
         <View style={styles.scoresList}>
           {detectedDarts.map((dart, index) => (
             <View key={index} style={styles.scoreItem}>
@@ -374,13 +413,16 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
       <View style={styles.instructions}>
         <Text style={styles.instructionText}>
           {!isDetecting 
-            ? "Appuyez sur 'Démarrer' pour commencer la détection"
-            : "Lancez vos fléchettes sur la cible. La détection est automatique."
+            ? "Appuyez sur 'Demarrer' pour commencer la detection"
+            : "Lancez vos flechettes sur la cible. La detection est automatique."
           }
         </Text>
+        {detectionError && (
+          <Text style={styles.errorText}>{detectionError}</Text>
+        )}
       </View>
 
-      {/* Contrôles */}
+      {/* Controles */}
       <View style={styles.controls}>
         {!isDetecting ? (
           <TouchableOpacity
@@ -388,7 +430,7 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
             onPress={startDetection}
           >
             <Play size={20} color="#0F0F0F" />
-            <Text style={styles.startButtonText}>Démarrer la détection</Text>
+            <Text style={styles.startButtonText}>Demarrer la detection</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
@@ -396,7 +438,7 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
             onPress={stopDetection}
           >
             <Pause size={20} color="#FFFFFF" />
-            <Text style={styles.stopButtonText}>Arrêter</Text>
+            <Text style={styles.stopButtonText}>Arreter</Text>
           </TouchableOpacity>
         )}
 
@@ -613,6 +655,12 @@ const styles = StyleSheet.create({
     color: '#666666',
     textAlign: 'center',
   },
+  errorText: {
+    marginTop: 8,
+    color: '#FF0041',
+    fontSize: 13,
+    textAlign: 'center',
+  },
   controls: {
     padding: 20,
     paddingBottom: 40,
@@ -703,3 +751,4 @@ const styles = StyleSheet.create({
     color: '#0F0F0F',
   },
 });
+
