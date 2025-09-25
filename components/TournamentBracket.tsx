@@ -1,9 +1,11 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
 import { TournamentBracket, Round, Match, Player } from '@/types/tournament';
 import { TournamentGenerator } from '@/utils/tournamentGenerator';
 import { TournamentRanking } from './TournamentRanking';
-import { Trophy, Users, Target } from 'lucide-react-native';
+import { Trophy, Users, Target, ChevronLeft, ChevronRight } from 'lucide-react-native';
+
+const { width: screenWidth } = Dimensions.get('window');
 
 interface TournamentBracketProps {
   bracket: TournamentBracket;
@@ -34,11 +36,19 @@ const MatchCard: React.FC<MatchCardProps> = ({ match, onPress, isAdmin }) => {
     }
   };
 
+  const canPlayMatch = () => {
+    return match.player1 && match.player2 && match.status !== 'completed';
+  };
+
   return (
     <TouchableOpacity 
-      style={[styles.matchCard, { borderColor: getMatchStatusColor() }]} 
+      style={[
+        styles.matchCard, 
+        { borderColor: getMatchStatusColor() },
+        !canPlayMatch() && !isAdmin && styles.disabledMatch
+      ]} 
       onPress={onPress}
-      disabled={!isAdmin && match.status === 'pending'}
+      disabled={!isAdmin && !canPlayMatch()}
     >
       <View style={styles.matchHeader}>
         <Text style={[styles.matchStatus, { color: getMatchStatusColor() }]}>
@@ -64,7 +74,7 @@ const MatchCard: React.FC<MatchCardProps> = ({ match, onPress, isAdmin }) => {
             {match.player1?.name || 'En attente...'}
           </Text>
           {match.winner?.id === match.player1?.id && (
-            <Trophy size={16} color="#FFD700" />
+            <Trophy size={14} color="#0F0F0F" />
           )}
         </View>
 
@@ -82,12 +92,12 @@ const MatchCard: React.FC<MatchCardProps> = ({ match, onPress, isAdmin }) => {
             {match.player2?.name || 'En attente...'}
           </Text>
           {match.winner?.id === match.player2?.id && (
-            <Trophy size={16} color="#FFD700" />
+            <Trophy size={14} color="#0F0F0F" />
           )}
         </View>
       </View>
 
-      {isAdmin && match.player1 && match.player2 && match.status !== 'completed' && (
+      {isAdmin && canPlayMatch() && (
         <View style={styles.adminActions}>
           <Text style={styles.adminHint}>Appuyez pour saisir le résultat</Text>
         </View>
@@ -96,38 +106,25 @@ const MatchCard: React.FC<MatchCardProps> = ({ match, onPress, isAdmin }) => {
   );
 };
 
-const RoundView: React.FC<{ round: Round; onMatchPress: (match: Match) => void; isAdmin?: boolean }> = ({ 
-  round, 
-  onMatchPress, 
-  isAdmin 
-}) => (
-  <View style={styles.roundContainer}>
-    <View style={styles.roundHeader}>
-      <Text style={styles.roundTitle}>{round.name}</Text>
-      <View style={[
-        styles.roundStatus,
-        { backgroundColor: round.isCompleted ? '#00FF41' : '#666666' }
-      ]}>
-        <Text style={[
-          styles.roundStatusText,
-          { color: round.isCompleted ? '#0F0F0F' : '#FFFFFF' }
-        ]}>
-          {round.isCompleted ? 'Terminé' : 'En cours'}
-        </Text>
-      </View>
+const RoundTab: React.FC<{
+  round: Round;
+  isActive: boolean;
+  onPress: () => void;
+}> = ({ round, isActive, onPress }) => (
+  <TouchableOpacity
+    style={[styles.roundTab, isActive && styles.activeRoundTab]}
+    onPress={onPress}
+  >
+    <Text style={[styles.roundTabText, isActive && styles.activeRoundTabText]}>
+      {round.name}
+    </Text>
+    <View style={[
+      styles.roundTabIndicator,
+      { backgroundColor: round.isCompleted ? '#00FF41' : '#666666' }
+    ]}>
+      <Text style={styles.roundTabCount}>{round.matches.length}</Text>
     </View>
-
-    <View style={styles.matchesGrid}>
-      {round.matches.map((match) => (
-        <MatchCard
-          key={match.id}
-          match={match}
-          onPress={() => onMatchPress(match)}
-          isAdmin={isAdmin}
-        />
-      ))}
-    </View>
-  </View>
+  </TouchableOpacity>
 );
 
 export const TournamentBracketComponent: React.FC<TournamentBracketProps> = ({ 
@@ -135,6 +132,7 @@ export const TournamentBracketComponent: React.FC<TournamentBracketProps> = ({
   onMatchPress, 
   isAdmin = false 
 }) => {
+  const [activeRoundIndex, setActiveRoundIndex] = useState(0);
   const rounds = TournamentGenerator.getRounds(bracket);
 
   // Si le tournoi est terminé, afficher le classement
@@ -142,8 +140,19 @@ export const TournamentBracketComponent: React.FC<TournamentBracketProps> = ({
     return <TournamentRanking bracket={bracket} />;
   }
 
+  const activeRound = rounds[activeRoundIndex];
+
+  const navigateToRound = (direction: 'prev' | 'next') => {
+    if (direction === 'prev' && activeRoundIndex > 0) {
+      setActiveRoundIndex(activeRoundIndex - 1);
+    } else if (direction === 'next' && activeRoundIndex < rounds.length - 1) {
+      setActiveRoundIndex(activeRoundIndex + 1);
+    }
+  };
+
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <View style={styles.container}>
+      {/* Header fixe */}
       <View style={styles.header}>
         <View style={styles.tournamentInfo}>
           <Text style={styles.tournamentTitle}>{bracket.name}</Text>
@@ -165,14 +174,14 @@ export const TournamentBracketComponent: React.FC<TournamentBracketProps> = ({
 
         {bracket.winner && (
           <View style={styles.winnerContainer}>
-            <Trophy size={24} color="#FFD700" />
+            <Trophy size={20} color="#FFD700" />
             <Text style={styles.winnerText}>Vainqueur</Text>
             <Text style={styles.winnerName}>{bracket.winner.name}</Text>
           </View>
         )}
       </View>
 
-      {/* Indicateur de progression */}
+      {/* Indicateur de progression pour single elimination */}
       {bracket.format === 'single_elimination' && (
         <View style={styles.progressContainer}>
           <Text style={styles.progressTitle}>Progression du tournoi</Text>
@@ -190,48 +199,95 @@ export const TournamentBracketComponent: React.FC<TournamentBracketProps> = ({
         </View>
       )}
 
-      {bracket.format === 'double_elimination' ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.roundsScroll}>
-          <View style={styles.doubleEliminationContainer}>
-            {rounds.map((round) => (
-              <RoundView
-                key={`${round.number}-${round.name}`}
-                round={round}
-                onMatchPress={onMatchPress}
-                isAdmin={isAdmin}
-              />
-            ))}
-          </View>
+      {/* Navigation par onglets */}
+      <View style={styles.tabsContainer}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          style={styles.tabsScroll}
+          contentContainerStyle={styles.tabsContent}
+        >
+          {rounds.map((round, index) => (
+            <RoundTab
+              key={`${round.number}-${round.name}`}
+              round={round}
+              isActive={index === activeRoundIndex}
+              onPress={() => setActiveRoundIndex(index)}
+            />
+          ))}
         </ScrollView>
-      ) : bracket.format === 'round_robin' ? (
-        <View style={styles.roundRobinContainer}>
-          <Text style={styles.sectionTitle}>Tous les matchs</Text>
-          <View style={styles.matchesGrid}>
-            {bracket.matches.map((match) => (
-              <MatchCard
-                key={match.id}
-                match={match}
-                onPress={() => onMatchPress(match)}
-                isAdmin={isAdmin}
-              />
-            ))}
-          </View>
+      </View>
+
+      {/* Navigation avec flèches */}
+      <View style={styles.navigationContainer}>
+        <TouchableOpacity
+          style={[styles.navButton, activeRoundIndex === 0 && styles.navButtonDisabled]}
+          onPress={() => navigateToRound('prev')}
+          disabled={activeRoundIndex === 0}
+        >
+          <ChevronLeft size={20} color={activeRoundIndex === 0 ? '#333333' : '#FFFFFF'} />
+          <Text style={[styles.navButtonText, activeRoundIndex === 0 && styles.navButtonTextDisabled]}>
+            Précédent
+          </Text>
+        </TouchableOpacity>
+
+        <View style={styles.roundIndicator}>
+          <Text style={styles.roundIndicatorText}>
+            {activeRoundIndex + 1} / {rounds.length}
+          </Text>
         </View>
-      ) : (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.roundsScroll}>
-          <View style={styles.roundsContainer}>
-            {rounds.map((round) => (
-              <RoundView
-                key={round.number}
-                round={round}
-                onMatchPress={onMatchPress}
-                isAdmin={isAdmin}
-              />
-            ))}
+
+        <TouchableOpacity
+          style={[styles.navButton, activeRoundIndex === rounds.length - 1 && styles.navButtonDisabled]}
+          onPress={() => navigateToRound('next')}
+          disabled={activeRoundIndex === rounds.length - 1}
+        >
+          <Text style={[styles.navButtonText, activeRoundIndex === rounds.length - 1 && styles.navButtonTextDisabled]}>
+            Suivant
+          </Text>
+          <ChevronRight size={20} color={activeRoundIndex === rounds.length - 1 ? '#333333' : '#FFFFFF'} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Contenu de la manche active */}
+      <ScrollView style={styles.roundContent} showsVerticalScrollIndicator={false}>
+        {activeRound && (
+          <View style={styles.roundContainer}>
+            <View style={styles.roundHeader}>
+              <Text style={styles.roundTitle}>{activeRound.name}</Text>
+              <View style={[
+                styles.roundStatus,
+                { backgroundColor: activeRound.isCompleted ? '#00FF41' : '#666666' }
+              ]}>
+                <Text style={[
+                  styles.roundStatusText,
+                  { color: activeRound.isCompleted ? '#0F0F0F' : '#FFFFFF' }
+                ]}>
+                  {activeRound.isCompleted ? 'Terminé' : 'En cours'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.matchesGrid}>
+              {activeRound.matches.map((match) => (
+                <MatchCard
+                  key={match.id}
+                  match={match}
+                  onPress={() => onMatchPress(match)}
+                  isAdmin={isAdmin}
+                />
+              ))}
+            </View>
+
+            {activeRound.matches.length === 0 && (
+              <View style={styles.emptyRound}>
+                <Text style={styles.emptyRoundText}>Aucun match dans cette manche</Text>
+              </View>
+            )}
           </View>
-        </ScrollView>
-      )}
-    </ScrollView>
+        )}
+      </ScrollView>
+    </View>
   );
 };
 
@@ -244,6 +300,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#1F1F1F',
+    backgroundColor: '#0F0F0F',
   },
   tournamentInfo: {
     marginBottom: 16,
@@ -286,49 +343,147 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginTop: 4,
   },
-  sectionTitle: {
-    fontSize: 20,
+  progressContainer: {
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1F1F1F',
+    backgroundColor: '#0F0F0F',
+  },
+  progressTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  progressBar: {
+    height: 8,
+    backgroundColor: '#2A2A2A',
+    borderRadius: 4,
+    marginBottom: 8,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#00FF41',
+    borderRadius: 4,
+  },
+  progressText: {
+    fontSize: 14,
+    color: '#666666',
+    textAlign: 'center',
+  },
+  tabsContainer: {
+    backgroundColor: '#0F0F0F',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1F1F1F',
+  },
+  tabsScroll: {
+    maxHeight: 60,
+  },
+  tabsContent: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  roundTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1F1F1F',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    minWidth: 120,
+  },
+  activeRoundTab: {
+    backgroundColor: '#00FF41',
+    borderColor: '#00FF41',
+  },
+  roundTabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    flex: 1,
+  },
+  activeRoundTabText: {
+    color: '#0F0F0F',
+  },
+  roundTabIndicator: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  roundTabCount: {
+    fontSize: 10,
     fontWeight: 'bold',
     color: '#FFFFFF',
-    padding: 20,
-    paddingBottom: 16,
   },
-  roundRobinContainer: {
-    flex: 1,
-  },
-  roundsScroll: {
-    flex: 1,
-  },
-  roundsContainer: {
+  navigationContainer: {
     flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingVertical: 12,
+    backgroundColor: '#1F1F1F',
+    borderBottomWidth: 1,
+    borderBottomColor: '#2A2A2A',
   },
-  doubleEliminationContainer: {
+  navButton: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    minHeight: 600,
+    alignItems: 'center',
+    backgroundColor: '#2A2A2A',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+  },
+  navButtonDisabled: {
+    backgroundColor: '#1A1A1A',
+  },
+  navButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  navButtonTextDisabled: {
+    color: '#333333',
+  },
+  roundIndicator: {
+    backgroundColor: '#00FF41',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  roundIndicatorText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#0F0F0F',
+  },
+  roundContent: {
+    flex: 1,
+    paddingBottom: 100, // Espace pour la barre de navigation
   },
   roundContainer: {
-    marginRight: 20,
-    minWidth: 280,
+    padding: 20,
   },
   roundHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-    paddingTop: 20,
+    marginBottom: 20,
   },
   roundTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#FFFFFF',
   },
   roundStatus: {
     paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingVertical: 6,
     borderRadius: 12,
   },
   roundStatusText: {
@@ -336,14 +491,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   matchesGrid: {
-    gap: 12,
+    gap: 16,
   },
   matchCard: {
     backgroundColor: '#1F1F1F',
     borderRadius: 12,
     padding: 16,
-    borderWidth: 1,
-    marginBottom: 8,
+    borderWidth: 2,
+  },
+  disabledMatch: {
+    opacity: 0.6,
   },
   matchHeader: {
     flexDirection: 'row',
@@ -367,7 +524,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 8,
     backgroundColor: '#2A2A2A',
@@ -379,6 +536,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#FFFFFF',
     fontWeight: '500',
+    flex: 1,
   },
   winnerText: {
     color: '#0F0F0F',
@@ -405,32 +563,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#0F0F0F',
   },
-  progressContainer: {
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1F1F1F',
+  emptyRound: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
   },
-  progressTitle: {
+  emptyRoundText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  progressBar: {
-    height: 8,
-    backgroundColor: '#2A2A2A',
-    borderRadius: 4,
-    marginBottom: 8,
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#00FF41',
-    borderRadius: 4,
-  },
-  progressText: {
-    fontSize: 14,
     color: '#666666',
-    textAlign: 'center',
+    fontStyle: 'italic',
   },
 });

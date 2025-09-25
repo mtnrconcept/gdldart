@@ -135,6 +135,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0F0F0F',
+    paddingBottom: 80, // Espace pour la barre de navigation
   },
   loading: {
     flex: 1,
