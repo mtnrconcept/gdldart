@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, Trophy, Target, TrendingUp, Medal, Crown } from 'lucide-react-native';
+import { ScoringButton } from '@/components/ScoringButton';
 
 interface Player {
   id: string;
@@ -83,6 +84,7 @@ const mockPlayers: Player[] = [
 export default function PlayersScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'rank' | 'points' | 'winRate'>('rank');
+  const [showAutoScoring, setShowAutoScoring] = useState(false);
 
   const filteredPlayers = mockPlayers
     .filter((player) =>
@@ -147,8 +149,13 @@ export default function PlayersScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Classement des Joueurs</Text>
-        <Text style={styles.subtitle}>Découvrez les meilleurs joueurs</Text>
+        <View style={styles.headerContent}>
+          <View>
+            <Text style={styles.title}>Classement des Joueurs</Text>
+            <Text style={styles.subtitle}>Découvrez les meilleurs joueurs</Text>
+          </View>
+          <ScoringButton onPress={() => setShowAutoScoring(true)} />
+        </View>
       </View>
 
       <View style={styles.controls}>
@@ -258,6 +265,11 @@ const styles = StyleSheet.create({
     padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#1F1F1F',
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   title: {
     fontSize: 28,

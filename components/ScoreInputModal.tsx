@@ -9,13 +9,14 @@ import {
   Alert,
 } from 'react-native';
 import { Match, Player } from '@/types/tournament';
-import { Trophy, Target } from 'lucide-react-native';
+import { Trophy, Target, Calculator } from 'lucide-react-native';
 
 interface ScoreInputModalProps {
   visible: boolean;
   match: Match;
   onClose: () => void;
   onSubmit: (winner: Player, score: { player1Score: number; player2Score: number }) => void;
+  onOpenAutoScoring: () => void;
 }
 
 export const ScoreInputModal: React.FC<ScoreInputModalProps> = ({
@@ -23,6 +24,7 @@ export const ScoreInputModal: React.FC<ScoreInputModalProps> = ({
   match,
   onClose,
   onSubmit,
+  onOpenAutoScoring,
 }) => {
   const [player1Score, setPlayer1Score] = useState('');
   const [player2Score, setPlayer2Score] = useState('');
@@ -73,6 +75,24 @@ export const ScoreInputModal: React.FC<ScoreInputModalProps> = ({
             <Text style={styles.title}>Saisir le résultat</Text>
           </View>
 
+          <View style={styles.modeSelection}>
+            <TouchableOpacity
+              style={styles.autoScoringButton}
+              onPress={() => {
+                handleClose();
+                onOpenAutoScoring();
+              }}
+            >
+              <Calculator size={20} color="#0F0F0F" />
+              <Text style={styles.autoScoringButtonText}>Comptage Automatique</Text>
+            </TouchableOpacity>
+            
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>OU</Text>
+              <View style={styles.dividerLine} />
+            </View>
+          </View>
           <View style={styles.matchInfo}>
             <Text style={styles.matchTitle}>
               {match.player1.name} vs {match.player2.name}
@@ -159,6 +179,39 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: '#FFFFFF',
+  },
+  modeSelection: {
+    marginBottom: 20,
+  },
+  autoScoringButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#00FF41',
+    paddingVertical: 16,
+    borderRadius: 12,
+    gap: 8,
+    marginBottom: 16,
+  },
+  autoScoringButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#0F0F0F',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#2A2A2A',
+  },
+  dividerText: {
+    fontSize: 12,
+    color: '#666666',
+    fontWeight: '600',
   },
   matchInfo: {
     alignItems: 'center',

@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Trophy, Clock, Users, MapPin, Calendar, Target } from 'lucide-react-native';
+import { ScoringButton } from '@/components/ScoringButton';
 
 interface LiveTournament {
   id: string;
@@ -72,6 +73,7 @@ const mockUpcomingTournaments: UpcomingTournament[] = [
 
 export default function LobbyScreen() {
   const [activeTab, setActiveTab] = useState<'live' | 'upcoming'>('live');
+  const [showAutoScoring, setShowAutoScoring] = useState(false);
 
   const renderLiveTournament = ({ item }: { item: LiveTournament }) => (
     <TouchableOpacity style={styles.liveCard}>
@@ -140,8 +142,13 @@ export default function LobbyScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Lobby des Tournois</Text>
-        <Text style={styles.subtitle}>Suivez l'action en temps réel</Text>
+        <View style={styles.headerContent}>
+          <View>
+            <Text style={styles.title}>Lobby des Tournois</Text>
+            <Text style={styles.subtitle}>Suivez l'action en temps réel</Text>
+          </View>
+          <ScoringButton onPress={() => setShowAutoScoring(true)} />
+        </View>
       </View>
 
       <View style={styles.tabContainer}>
@@ -208,6 +215,11 @@ const styles = StyleSheet.create({
     padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#1F1F1F',
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   title: {
     fontSize: 28,

@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Trophy, Target, TrendingUp, Calendar, Medal, Crown, CreditCard as Edit, Settings, ChartBar as BarChart3, Award } from 'lucide-react-native';
+import { ScoringButton } from '@/components/ScoringButton';
 
 interface Achievement {
   id: string;
@@ -91,6 +92,7 @@ const mockMatches: Match[] = [
 
 export default function ProfileScreen() {
   const [activeTab, setActiveTab] = useState<'stats' | 'achievements' | 'history'>('stats');
+  const [showAutoScoring, setShowAutoScoring] = useState(false);
 
   const userStats = {
     name: 'Votre Nom',
@@ -142,6 +144,7 @@ export default function ProfileScreen() {
             <TouchableOpacity style={styles.actionButton}>
               <Settings size={20} color="#666666" />
             </TouchableOpacity>
+            <ScoringButton onPress={() => setShowAutoScoring(true)} />
           </View>
         </View>
 

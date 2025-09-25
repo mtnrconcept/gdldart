@@ -4,6 +4,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { TournamentBracketComponent } from '@/components/TournamentBracket';
 import { ScoreInputModal } from '@/components/ScoreInputModal';
+import { AutomaticScoring } from '@/components/AutomaticScoring';
 import { TournamentBracket, Match, Player } from '@/types/tournament';
 import { TournamentGenerator } from '@/utils/tournamentGenerator';
 
@@ -32,6 +33,7 @@ export default function TournamentScreen() {
   const [bracket, setBracket] = useState<TournamentBracket | null>(null);
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
   const [showScoreModal, setShowScoreModal] = useState(false);
+  const [showAutoScoring, setShowAutoScoring] = useState(false);
 
   useEffect(() => {
     // Simuler le chargement du tournoi
@@ -122,6 +124,19 @@ export default function TournamentScreen() {
           match={selectedMatch}
           onClose={() => {
             setShowScoreModal(false);
+            setSelectedMatch(null);
+          }}
+          onSubmit={handleScoreSubmit}
+          onOpenAutoScoring={() => setShowAutoScoring(true)}
+        />
+      )}
+
+      {selectedMatch && (
+        <AutomaticScoring
+          visible={showAutoScoring}
+          match={selectedMatch}
+          onClose={() => {
+            setShowAutoScoring(false);
             setSelectedMatch(null);
           }}
           onSubmit={handleScoreSubmit}

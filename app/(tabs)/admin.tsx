@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Plus, Settings, Users, Trophy, Calendar, MapPin, Clock, Target, CreditCard as Edit, Trash2, Eye, Play } from 'lucide-react-native';
 import { router } from 'expo-router';
+import { ScoringButton } from '@/components/ScoringButton';
 
 interface Tournament {
   id: string;
@@ -60,6 +61,7 @@ export default function AdminScreen() {
   const [tournaments, setTournaments] = useState<Tournament[]>(mockTournaments);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingTournament, setEditingTournament] = useState<Tournament | null>(null);
+  const [showAutoScoring, setShowAutoScoring] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     location: '',
@@ -204,13 +206,16 @@ export default function AdminScreen() {
           <Text style={styles.title}>Administration</Text>
           <Text style={styles.subtitle}>Gérez vos tournois</Text>
         </View>
-        <TouchableOpacity
-          style={styles.createButton}
-          onPress={() => setShowCreateModal(true)}
-        >
-          <Plus size={20} color="#0F0F0F" />
-          <Text style={styles.createButtonText}>Créer</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <ScoringButton onPress={() => setShowAutoScoring(true)} />
+          <TouchableOpacity
+            style={styles.createButton}
+            onPress={() => setShowCreateModal(true)}
+          >
+            <Plus size={20} color="#0F0F0F" />
+            <Text style={styles.createButtonText}>Créer</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.statsContainer}>
@@ -523,6 +528,11 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     color: '#666666',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   createButton: {
     flexDirection: 'row',

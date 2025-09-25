@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, ListFilter as Filter, Calendar, MapPin, Users, Trophy } from 'lucide-react-native';
+import { ScoringButton } from '@/components/ScoringButton';
 
 interface Tournament {
   id: string;
@@ -64,6 +65,7 @@ export default function TournamentsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterVisible, setFilterVisible] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState('all');
+  const [showAutoScoring, setShowAutoScoring] = useState(false);
 
   const filteredTournaments = tournaments.filter((tournament) => {
     const matchesSearch = tournament.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -97,8 +99,13 @@ export default function TournamentsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Tournois de Fléchettes</Text>
-        <Text style={styles.subtitle}>Découvrez et rejoignez les tournois</Text>
+        <View style={styles.headerContent}>
+          <View>
+            <Text style={styles.title}>Tournois de Fléchettes</Text>
+            <Text style={styles.subtitle}>Découvrez et rejoignez les tournois</Text>
+          </View>
+          <ScoringButton onPress={() => setShowAutoScoring(true)} />
+        </View>
       </View>
 
       <View style={styles.searchContainer}>
@@ -237,6 +244,11 @@ const styles = StyleSheet.create({
     padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#1F1F1F',
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   title: {
     fontSize: 28,
