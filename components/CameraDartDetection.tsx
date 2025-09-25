@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -47,6 +47,10 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const cameraRef = useRef<CameraView>(null);
   const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const currentDartCountRef = useRef(0);
+  const detectedDartsRef = useRef<DartDetection[]>([]);
+  const isProcessingRef = useRef(false);
+
 
   useEffect(() => {
     if (visible) {
@@ -59,108 +63,72 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
     };
   }, [visible]);
 
+  useEffect(() => {
+    currentDartCountRef.current = currentDartCount;
+  }, [currentDartCount]);
+
+  useEffect(() => {
+    detectedDartsRef.current = detectedDarts;
+  }, [detectedDarts]);
+
+  useEffect(() => {
+    isProcessingRef.current = isProcessing;
+  }, [isProcessing]);
+
   const resetDetection = () => {
     setDetectedDarts([]);
+    detectedDartsRef.current = [];
     setCurrentDartCount(0);
+    currentDartCountRef.current = 0;
     setIsDetecting(false);
     setIsProcessing(false);
+    isProcessingRef.current = false;
     if (detectionIntervalRef.current) {
       clearInterval(detectionIntervalRef.current);
+      detectionIntervalRef.current = null;
     }
   };
 
-  const startDetection = () => {
+  const startDetection = async () => {
     if (!permission?.granted) {
-      requestPermission();
-      return;
+      const response = await requestPermission();
+      if (!response?.granted) {
+        return;
+      }
     }
 
     setIsDetecting(true);
-    
-    // Simuler la détection avec un intervalle
-    detectionIntervalRef.current = setInterval(() => {
-      if (currentDartCount < maxDarts && !isProcessing) {
-        captureAndAnalyze();
-      }
-    }, 2000); // Vérifier toutes les 2 secondes
   };
 
   const stopDetection = () => {
     setIsDetecting(false);
     if (detectionIntervalRef.current) {
       clearInterval(detectionIntervalRef.current);
+      detectionIntervalRef.current = null;
     }
   };
 
-  const captureAndAnalyze = async () => {
-    if (!cameraRef.current || isProcessing) return;
-
-    setIsProcessing(true);
-
-    try {
-      // Capturer l'image
-      const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.8,
-        base64: true,
-      });
-
-      if (photo?.base64) {
-        // Analyser l'image avec le modèle deep-darts
-        const detections = await analyzeDartboard(photo.base64);
-        
-        if (detections.length > detectedDarts.length) {
-          // Nouvelles fléchettes détectées
-          const newDarts = detections.slice(detectedDarts.length);
-          
-          for (const dart of newDarts) {
-            if (currentDartCount < maxDarts) {
-              setDetectedDarts(prev => [...prev, dart]);
-              setCurrentDartCount(prev => prev + 1);
-              onDartDetected(dart.score);
-              
-              // Notification visuelle/sonore
-              Alert.alert(
-                'Fléchette détectée !',
-                `Score: ${dart.score} points (${dart.sector})`,
-                [{ text: 'OK' }]
-              );
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Erreur lors de la capture:', error);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  // Fonction simulée d'analyse d'image (à remplacer par l'intégration réelle de deep-darts)
-  const analyzeDartboard = async (base64Image: string): Promise<DartDetection[]> => {
-    // Simulation de l'analyse avec deep-darts
-    // Dans la vraie implémentation, ceci ferait appel au modèle ML
-    
+  const analyzeDartboard = useCallback(async (base64Image: string, existingCount: number): Promise<DartDetection[]> => {
     return new Promise((resolve) => {
       setTimeout(() => {
-        // Simuler la détection de fléchettes
-        const mockDetections: DartDetection[] = [];
-        
-        // Générer des détections aléatoires pour la démo
-        const numDarts = Math.min(
-          Math.floor(Math.random() * 2) + detectedDarts.length,
+        const existingDetections = detectedDartsRef.current.slice(0, existingCount);
+        const mockDetections: DartDetection[] = [...existingDetections];
+
+        const targetCount = Math.min(
+          existingCount + Math.floor(Math.random() * 2),
           maxDarts
         );
-        
-        for (let i = detectedDarts.length; i < numDarts; i++) {
+
+        for (let i = existingCount; i < targetCount; i++) {
           const scores = [20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 25, 50];
           const multipliers = ['simple', 'double', 'triple'];
-          
+
           const baseScore = scores[Math.floor(Math.random() * scores.length)];
           const multiplier = multipliers[Math.floor(Math.random() * multipliers.length)];
-          
+
           let finalScore = baseScore;
           let sector = `${baseScore}`;
-          
+
           if (baseScore === 25) {
             finalScore = 25;
             sector = 'Bull simple';
@@ -181,7 +149,7 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
                 sector = `Simple ${baseScore}`;
             }
           }
-          
+
           mockDetections.push({
             x: Math.random() * 300 + 50,
             y: Math.random() * 300 + 50,
@@ -190,12 +158,90 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
             confidence: 0.85 + Math.random() * 0.15,
           });
         }
-        
+
         resolve(mockDetections);
       }, 1000);
     });
-  };
+  }, [maxDarts]);
 
+  const captureAndAnalyze = useCallback(async () => {
+    if (!cameraRef.current || isProcessingRef.current) return;
+
+    setIsProcessing(true);
+    isProcessingRef.current = true;
+
+    try {
+      const photo = await cameraRef.current.takePictureAsync({
+        quality: 0.8,
+        base64: true,
+      });
+
+      if (photo?.base64) {
+        const existingCount = detectedDartsRef.current.length;
+        const detections = await analyzeDartboard(photo.base64, existingCount);
+
+        if (detections.length > existingCount) {
+          const newDetections = detections.slice(existingCount);
+          const remainingSlots = Math.max(0, maxDarts - existingCount);
+          const dartsToAdd = newDetections.slice(0, remainingSlots);
+
+          if (dartsToAdd.length) {
+            setDetectedDarts(prev => {
+              const updated = [...prev, ...dartsToAdd];
+              detectedDartsRef.current = updated;
+              return updated;
+            });
+
+            const newCount = existingCount + dartsToAdd.length;
+            setCurrentDartCount(newCount);
+            currentDartCountRef.current = newCount;
+
+            dartsToAdd.forEach(dart => {
+              onDartDetected(dart.score);
+
+              Alert.alert(
+                'Flechette detectee !',
+                `Score: ${dart.score} points (${dart.sector})`,
+                [{ text: 'OK' }]
+              );
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Erreur lors de la capture:', error);
+    } finally {
+      setIsProcessing(false);
+      isProcessingRef.current = false;
+    }
+  }, [analyzeDartboard, maxDarts, onDartDetected]);
+
+  useEffect(() => {
+    if (!isDetecting) {
+      if (detectionIntervalRef.current) {
+        clearInterval(detectionIntervalRef.current);
+        detectionIntervalRef.current = null;
+      }
+      return;
+    }
+
+    captureAndAnalyze();
+
+    detectionIntervalRef.current = setInterval(() => {
+      if (currentDartCountRef.current < maxDarts && !isProcessingRef.current) {
+        captureAndAnalyze();
+      }
+    }, 2000);
+
+    return () => {
+      if (detectionIntervalRef.current) {
+        clearInterval(detectionIntervalRef.current);
+        detectionIntervalRef.current = null;
+      }
+    };
+  }, [isDetecting, maxDarts, captureAndAnalyze]);
+
+  // Fonction simulee d'analyse d'image (a remplacer par l'integration reelle de deep-darts)
   const completeTurn = () => {
     const scores = detectedDarts.map(dart => dart.score);
     onTurnComplete(scores);
@@ -206,7 +252,9 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
     if (detectedDarts.length > 0) {
       const newDarts = detectedDarts.slice(0, -1);
       setDetectedDarts(newDarts);
+      detectedDartsRef.current = newDarts;
       setCurrentDartCount(newDarts.length);
+      currentDartCountRef.current = newDarts.length;
     }
   };
 
