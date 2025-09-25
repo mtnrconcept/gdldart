@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, ListFilter as Filter, Calendar, MapPin, Users, Trophy } from 'lucide-react-native';
 import { ScoringButton } from '@/components/ScoringButton';
+import { AutomaticScoring } from '@/components/AutomaticScoring';
 
 interface Tournament {
   id: string;
@@ -67,6 +68,11 @@ export default function TournamentsScreen() {
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [showAutoScoring, setShowAutoScoring] = useState(false);
 
+  const handleScoringPress = () => {
+    console.log('Opening scoring modal');
+    setShowAutoScoring(true);
+  };
+
   const filteredTournaments = tournaments.filter((tournament) => {
     const matchesSearch = tournament.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          tournament.location.toLowerCase().includes(searchQuery.toLowerCase());
@@ -104,7 +110,7 @@ export default function TournamentsScreen() {
             <Text style={styles.title}>Tournois de Fléchettes</Text>
             <Text style={styles.subtitle}>Découvrez et rejoignez les tournois</Text>
           </View>
-          <ScoringButton onPress={() => setShowAutoScoring(true)} />
+          <ScoringButton onPress={handleScoringPress} />
         </View>
       </View>
 
@@ -229,6 +235,29 @@ export default function TournamentsScreen() {
               <Text style={styles.closeButtonText}>Fermer</Text>
             </TouchableOpacity>
           </View>
+        </View>
+      </Modal>
+
+      {/* Modal de comptage automatique */}
+      <Modal visible={showAutoScoring} transparent={false} animationType="slide">
+        <View style={styles.scoringModalContainer}>
+          <AutomaticScoring
+            visible={showAutoScoring}
+            match={{
+              id: 'demo-match',
+              tournamentId: 'demo',
+              round: 1,
+              position: 0,
+              player1: { id: '1', name: 'Joueur 1', avatar: 'https://images.pexels.com/photos/1681010/pexels-photo-1681010.jpeg?auto=compress&cs=tinysrgb&w=150' },
+              player2: { id: '2', name: 'Joueur 2', avatar: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=150' },
+              status: 'pending',
+            }}
+            onClose={() => setShowAutoScoring(false)}
+            onSubmit={(winner, score) => {
+              console.log('Match result:', winner, score);
+              setShowAutoScoring(false);
+            }}
+          />
         </View>
       </Modal>
     </SafeAreaView>
@@ -443,5 +472,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FFFFFF',
     textAlign: 'center',
+  },
+  scoringModalContainer: {
+    flex: 1,
+    backgroundColor: '#0F0F0F',
   },
 });

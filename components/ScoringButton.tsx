@@ -7,8 +7,13 @@ interface ScoringButtonProps {
 }
 
 export const ScoringButton: React.FC<ScoringButtonProps> = ({ onPress }) => {
+  const handlePress = () => {
+    console.log('ScoringButton pressed');
+    onPress();
+  };
+
   return (
-    <TouchableOpacity style={styles.button} onPress={onPress}>
+    <TouchableOpacity style={styles.button} onPress={handlePress}>
       <Calculator size={20} color="#0F0F0F" />
       <Text style={styles.buttonText}>Comptage</Text>
     </TouchableOpacity>
