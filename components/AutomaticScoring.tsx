@@ -251,9 +251,6 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
     22, 24, 26, 27, 28, 30, 32, 33, 34, 36, 38, 39, 40, 42, 45, 48, 50, 51, 54, 57, 60
   ];
 
-  const buttonWidth = getButtonWidth();
-  const buttonsPerRow = getButtonsPerRow();
-
   if (!match.player1 || !match.player2) return null;
 
   return (
@@ -378,27 +375,15 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
           {/* Boutons de score */}
           {!gameFinished && (
             <View style={styles.scoreButtonsContainer}>
-              <View style={[styles.scoreGrid, { gap: Math.max(4, Math.min(8, screenWidth > 400 ? 8 : 4)) }]}>
+              <View style={styles.scoreGrid}>
                 {scoreButtons.map((score) => (
                   <TouchableOpacity
                     key={score}
-                    style={[
-                      styles.scoreButton,
-                      {
-                        width: buttonWidth,
-                        minHeight: 40,
-                        maxHeight: screenHeight > 700 ? 50 : 45,
-                      }
-                    ]}
+                    style={styles.scoreButton}
                     onPress={() => addScore(score)}
                     disabled={currentThrow >= 3}
                   >
-                    <Text style={[
-                      styles.scoreButtonText,
-                      { fontSize: buttonWidth > 55 ? 16 : buttonWidth > 50 ? 14 : 12 }
-                    ]}>
-                      {score}
-                    </Text>
+                    <Text style={styles.scoreButtonText}>{score}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
