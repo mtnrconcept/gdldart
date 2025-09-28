@@ -72,8 +72,9 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
   const [cameraLayout, setCameraLayout] = useState({ width: 0, height: 0 });
   const [permissionRequesting, setPermissionRequesting] = useState(false);
   const cameraRef = useRef<CameraView>(null);
-  const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const detectionAbortController = useRef<AbortController | null>(null);
+  const isDetectingRef = useRef(false);
+  const inFlightRef = useRef(false);
+  const detectionLoopRef = useRef<Promise<void> | null>(null);
   const lastDetectionErrorRef = useRef<string | null>(null);
   const currentDartCountRef = useRef(0);
   const detectedDartsRef = useRef<DartDetectionResult[]>([]);
@@ -88,13 +89,8 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
       setIsCameraReady(false);
     }
     return () => {
-      if (detectionIntervalRef.current) {
-        clearInterval(detectionIntervalRef.current);
-      }
-      if (detectionAbortController.current) {
-        detectionAbortController.current.abort();
-        detectionAbortController.current = null;
-      }
+      isDetectingRef.current = false;
+      inFlightRef.current = false;
     };
   }, [visible]);
 
@@ -123,14 +119,9 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
     setIsCameraReady(false);
     lastFrameSignatureRef.current = null;
     autoStartAttemptedRef.current = false;
-    if (detectionIntervalRef.current) {
-      clearInterval(detectionIntervalRef.current);
-      detectionIntervalRef.current = null;
-    }
-    if (detectionAbortController.current) {
-      detectionAbortController.current.abort();
-      detectionAbortController.current = null;
-    }
+    isDetectingRef.current = false;
+    inFlightRef.current = false;
+    detectionLoopRef.current = null;
   };
 
   const handleRequestPermission = useCallback(async () => {
@@ -156,49 +147,6 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
       setPermissionRequesting(false);
     }
   }, [requestPermission]);
-
-  const startDetection = useCallback(async () => {
-    console.log('Démarrage de la détection...');
-    if (!permission?.granted) {
-      console.log('Permission non accordée, demande...');
-      const granted = await handleRequestPermission();
-      if (!granted && !permission?.granted) {
-        console.log('Permission toujours non accordée');
-        return;
-      }
-    }
-
-    if (!isCameraReady) {
-      Alert.alert('Caméra non prête', 'Veuillez attendre que la caméra soit initialisée.');
-      return;
-    }
-
-    setDetectionError(null);
-    lastDetectionErrorRef.current = null;
-    setIsDetecting(true);
-    console.log('Détection démarrée');
-  }, [handleRequestPermission, isCameraReady, permission?.granted]);
-
-  const stopDetection = useCallback(() => {
-    console.log('Arrêt de la détection');
-    setIsDetecting(false);
-    setIsProcessing(false);
-    isProcessingRef.current = false;
-    lastFrameSignatureRef.current = null;
-    if (detectionIntervalRef.current) {
-      clearInterval(detectionIntervalRef.current);
-      detectionIntervalRef.current = null;
-    }
-    if (detectionAbortController.current) {
-      detectionAbortController.current.abort();
-      detectionAbortController.current = null;
-    }
-  }, []);
-
-  const handleClose = () => {
-    stopDetection();
-    onClose();
-  };
 
   const hasSignificantFrameChange = useCallback((previous: string | null, current: string | null) => {
     if (!current) {
@@ -251,11 +199,12 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
   }, [cameraLayout]);
 
   const captureAndAnalyze = useCallback(async () => {
-    if (!cameraRef.current || isProcessingRef.current || !isCameraReady) {
-      console.log('Capture impossible:', { 
-        hasCamera: !!cameraRef.current, 
+    if (!cameraRef.current || isProcessingRef.current || !isCameraReady || !isDetectingRef.current) {
+      console.log('Capture impossible:', {
+        hasCamera: !!cameraRef.current,
         isProcessing: isProcessingRef.current,
-        isCameraReady 
+        isCameraReady,
+        isDetecting: isDetectingRef.current,
       });
       return;
     }
@@ -263,12 +212,6 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
     console.log('Début capture et analyse...');
     setIsProcessing(true);
     isProcessingRef.current = true;
-
-    const controller = new AbortController();
-    if (detectionAbortController.current) {
-      detectionAbortController.current.abort();
-    }
-    detectionAbortController.current = controller;
 
     try {
       const photo = await cameraRef.current.takePictureAsync({
@@ -309,7 +252,12 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
 
       lastFrameSignatureRef.current = frameBase64;
 
-      const remoteDetections = await detectDarts(frameBase64, { signal: controller.signal });
+      const remoteDetections = await detectDarts({
+        image: frameBase64,
+        width: resized.width,
+        height: resized.height,
+        mode: gameMode === 'cricket' ? undefined : gameMode,
+      });
       console.log('Détections reçues:', remoteDetections.length);
       const mappedDetections = convertDetections(remoteDetections);
 
@@ -364,10 +312,6 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
       });
     } catch (error) {
       console.error('Erreur capture et analyse:', error);
-      if (error instanceof Error && error.name === 'AbortError') {
-        return;
-      }
-
       const message =
         error instanceof DartDetectionError
           ? error.message
@@ -383,37 +327,81 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
     } finally {
       setIsProcessing(false);
       isProcessingRef.current = false;
-
-      if (detectionAbortController.current === controller) {
-        detectionAbortController.current = null;
-      }
     }
-  }, [convertDetections, hasSignificantFrameChange, isCameraReady, maxDarts, onDartDetected]);
+  }, [convertDetections, gameMode, hasSignificantFrameChange, isCameraReady, maxDarts, onDartDetected]);
 
-  useEffect(() => {
-    if (!isDetecting) {
-      if (detectionIntervalRef.current) {
-        clearInterval(detectionIntervalRef.current);
-        detectionIntervalRef.current = null;
+  const loopCapture = useCallback(async () => {
+    while (isDetectingRef.current) {
+      if (inFlightRef.current) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        continue;
       }
+
+      inFlightRef.current = true;
+      try {
+        await captureAndAnalyze();
+      } finally {
+        inFlightRef.current = false;
+      }
+
+      if (!isDetectingRef.current) {
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, STREAM_INTERVAL_MS));
+    }
+  }, [captureAndAnalyze]);
+
+  const startDetection = useCallback(async () => {
+    console.log('Démarrage de la détection...');
+
+    if (isDetectingRef.current || detectionLoopRef.current) {
       return;
     }
 
-    captureAndAnalyze();
-
-    detectionIntervalRef.current = setInterval(() => {
-      if (currentDartCountRef.current < maxDarts && !isProcessingRef.current) {
-        captureAndAnalyze();
+    if (!permission?.granted) {
+      console.log('Permission non accordée, demande...');
+      const granted = await handleRequestPermission();
+      if (!granted && !permission?.granted) {
+        console.log('Permission toujours non accordée');
+        return;
       }
-    }, STREAM_INTERVAL_MS);
+    }
 
-    return () => {
-      if (detectionIntervalRef.current) {
-        clearInterval(detectionIntervalRef.current);
-        detectionIntervalRef.current = null;
-      }
-    };
-  }, [captureAndAnalyze, isDetecting, maxDarts]);
+    if (!isCameraReady) {
+      Alert.alert('Caméra non prête', 'Veuillez attendre que la caméra soit initialisée.');
+      return;
+    }
+
+    setDetectionError(null);
+    lastDetectionErrorRef.current = null;
+    isDetectingRef.current = true;
+    setIsDetecting(true);
+    console.log('Détection démarrée');
+
+    detectionLoopRef.current = loopCapture()
+      .catch((error) => {
+        console.error('Erreur dans la boucle de capture:', error);
+      })
+      .finally(() => {
+        detectionLoopRef.current = null;
+        inFlightRef.current = false;
+      });
+  }, [handleRequestPermission, isCameraReady, loopCapture, permission?.granted]);
+
+  const stopDetection = useCallback(() => {
+    console.log('Arrêt de la détection');
+    isDetectingRef.current = false;
+    setIsDetecting(false);
+    setIsProcessing(false);
+    isProcessingRef.current = false;
+    lastFrameSignatureRef.current = null;
+  }, []);
+
+  const handleClose = () => {
+    stopDetection();
+    onClose();
+  };
 
   useEffect(() => {
     if (!visible) {
