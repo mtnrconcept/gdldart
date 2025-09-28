@@ -10,20 +10,53 @@ export class DartDetectionError extends Error {
 
 const DEFAULT_ENDPOINT = 'https://deep-darts.fly.dev/api/detect';
 
-const DETECT_URL =
-  ((Constants.expoConfig?.extra as any)?.dartDetectionUrl ??
-    (Constants.expoConfig?.extra as any)?.dartDetection?.endpoint ??
-    process.env.EXPO_PUBLIC_DART_DETECTION_URL ??
-    DEFAULT_ENDPOINT) as string | undefined;
+type ExtraConfig = Record<string, unknown> | undefined | null;
 
-function assertUrl(u?: string): asserts u is string {
-  if (!u || !/^https?:\/\/.+/i.test(u)) {
+const extraProviders: Array<() => ExtraConfig> = [
+  () => (Constants?.expoConfig?.extra as ExtraConfig) ?? null,
+  () => (Constants as any)?.expoGoConfig?.extra ?? null,
+  () => (Constants as any)?.manifest?.extra ?? null,
+  () => (Constants as any)?.manifest2?.extraParams ?? null,
+];
+
+const isValidUrl = (value?: string | null): value is string =>
+  typeof value === 'string' && /^https?:\/\/.+/i.test(value);
+
+let cachedDetectUrl: string | null = null;
+
+function resolveDetectUrl(): string {
+  if (cachedDetectUrl) {
+    return cachedDetectUrl;
+  }
+
+  const fromExtras = extraProviders
+    .map((provider) => {
+      const extra = provider();
+      if (!extra) return undefined;
+      const extraRecord = extra as Record<string, unknown>;
+      const direct = extraRecord.dartDetectionUrl as string | undefined;
+      const nested = (extraRecord.dartDetection as { endpoint?: string } | undefined)?.endpoint;
+      const expoPublic = extraRecord.EXPO_PUBLIC_DART_DETECTION_URL as string | undefined;
+      return direct ?? nested ?? expoPublic;
+    })
+    .find((candidate) => isValidUrl(candidate));
+
+  const envUrl = process.env.EXPO_PUBLIC_DART_DETECTION_URL;
+
+  const resolved =
+    fromExtras ??
+    (isValidUrl(envUrl) ? envUrl : null) ??
+    (isValidUrl(DEFAULT_ENDPOINT) ? DEFAULT_ENDPOINT : null);
+
+  if (!resolved) {
     throw new DartDetectionError(
       `URL de détection invalide. Configure EXPO_PUBLIC_DART_DETECTION_URL (ex: http://192.168.0.18:8000/api/detect).`
     );
   }
+
+  cachedDetectUrl = resolved;
+  return resolved;
 }
-assertUrl(DETECT_URL);
 
 async function fetchWithTimeout(
   input: RequestInfo,
@@ -125,7 +158,9 @@ export async function detectDarts(payload: DetectPayload, token?: string) {
   try {
     const image = payload.image.replace(/^data:image\/\w+;base64,/, '');
 
-    const res = await fetchWithTimeout(DETECT_URL, {
+    const detectUrl = resolveDetectUrl();
+
+    const res = await fetchWithTimeout(detectUrl, {
       method: 'POST',
       headers: buildJsonHeaders(token),
       body: JSON.stringify({ ...payload, image }),
@@ -150,11 +185,22 @@ export async function detectDarts(payload: DetectPayload, token?: string) {
       .map((item) => toDetectionResult(item as RawDartDetection))
       .filter((item): item is DartDetectionResult => Boolean(item));
   } catch (err: any) {
+    if (err instanceof DartDetectionError) {
+      throw err;
+    }
     if (err?.name === 'AbortError') {
       throw new DartDetectionError('Délai dépassé (timeout) lors de la détection.', err);
     }
+    let endpoint = 'inconnue';
+    try {
+      endpoint = resolveDetectUrl();
+    } catch (resolutionError) {
+      if (resolutionError instanceof DartDetectionError) {
+        throw resolutionError;
+      }
+    }
     throw new DartDetectionError(
-      `Impossible de contacter le service de détection à l'URL ${DETECT_URL}. Vérifiez le réseau / l’URL.`,
+      `Impossible de contacter le service de détection à l'URL ${endpoint}. Vérifiez le réseau / l’URL.`,
       err
     );
   }
