@@ -201,8 +201,10 @@ const resolveEndpoint = (endpoint: string) => {
 };
 
 const getConfiguredEndpoint = () => {
-  const extra = Constants.expoConfig?.extra as { dartDetection?: { endpoint?: string } } | undefined;
-  const fromExtra = extra?.dartDetection?.endpoint;
+  const extra = Constants.expoConfig?.extra as
+    | { dartDetection?: { endpoint?: string }; dartDetectionUrl?: string }
+    | undefined;
+  const fromExtra = extra?.dartDetectionUrl ?? extra?.dartDetection?.endpoint;
   const fromEnv = process.env.EXPO_PUBLIC_DART_DETECTION_URL;
   return fromEnv ?? fromExtra ?? DEFAULT_ENDPOINT;
 };
