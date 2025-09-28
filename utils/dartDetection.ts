@@ -80,6 +80,32 @@ const toDetectionResult = (detection: RawDartDetection): DartDetectionResult | n
   };
 };
 
+const isAbsoluteUrl = (value: string) => /^https?:\/\//i.test(value);
+
+const resolveEndpoint = (endpoint: string) => {
+  if (!endpoint) {
+    return endpoint;
+  }
+
+  if (isAbsoluteUrl(endpoint)) {
+    return endpoint;
+  }
+
+  if (typeof window !== 'undefined' && window.location) {
+    try {
+      return new URL(endpoint, window.location.origin).toString();
+    } catch (error) {
+      console.warn('Impossible de résoudre l\'URL de détection à partir de la fenêtre courante.', {
+        endpoint,
+        origin: window.location.origin,
+        error,
+      });
+    }
+  }
+
+  return endpoint;
+};
+
 const getConfiguredEndpoint = () => {
   const extra = Constants.expoConfig?.extra as { dartDetection?: { endpoint?: string } } | undefined;
   const fromExtra = extra?.dartDetection?.endpoint;
@@ -96,16 +122,24 @@ export const detectDarts = async (
     throw new DartDetectionError('Aucun endpoint de d\u00E9tection de fl\u00E9chettes n\'est configur\u00E9.');
   }
 
-  console.log('Envoi de l\'image pour détection...', { endpoint, imageSize: base64Image.length });
+  const resolvedEndpoint = resolveEndpoint(endpoint);
+
+  console.log('Envoi de l\'image pour détection...', {
+    endpoint,
+    resolvedEndpoint,
+    imageSize: base64Image.length,
+  });
 
   try {
-    const response = await fetch(endpoint, {
+    const response = await fetch(resolvedEndpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        Accept: 'application/json',
       },
       body: JSON.stringify({ image: toDataUri(base64Image) }),
       signal: options?.signal,
+      cache: 'no-store',
     });
 
     console.log('Réponse du serveur:', response.status, response.statusText);
@@ -139,6 +173,13 @@ export const detectDarts = async (
     if (error instanceof Error && error.name === 'AbortError') {
       throw error;
     }
-    throw new DartDetectionError('Impossible de contacter le service de d\u00E9tection.', error);
+    const reason =
+      error instanceof TypeError && error.message === 'Failed to fetch'
+        ? "Impossible de contacter le service de détection à l'URL " +
+          resolvedEndpoint +
+          ". Vérifiez votre connexion réseau ou mettez à jour la variable EXPO_PUBLIC_DART_DETECTION_URL pour pointer vers un service accessible."
+        : 'Impossible de contacter le service de détection.';
+
+    throw new DartDetectionError(reason, error);
   }
 };
