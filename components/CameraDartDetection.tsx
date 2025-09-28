@@ -8,9 +8,11 @@ import {
   Dimensions,
   Platform,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import { Camera, RotateCcw, Target, Play, Pause, CircleCheck as CheckCircle } from 'lucide-react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { DartDetectionResult } from '@/types/dartDetection';
 import { detectDarts, DartDetectionError } from '@/utils/dartDetection';
@@ -47,6 +49,7 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
   currentPlayer,
   maxDarts = 3,
 }) => {
+  const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState<CameraType>('back');
   const [isCameraReady, setIsCameraReady] = useState(false);
@@ -347,20 +350,23 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
     setFacing(current => (current === 'back' ? 'front' : 'back'));
   };
 
+  const { height: windowHeight } = Dimensions.get('window');
+  const cameraHeight = Math.max(Math.min(windowHeight * 0.45, 420), 240);
+
   if (!permission) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#00FF41" />
           <Text style={styles.permissionText}>Chargement de la caméra...</Text>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (!permission.granted) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container}>
         <View style={styles.permissionContainer}>
           <Camera size={48} color="#666666" />
           <Text style={styles.permissionTitle}>Acces a la camera requis</Text>
@@ -379,17 +385,28 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
             )}
           </TouchableOpacity>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (!visible) return null;
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+      <View
+        style={[
+          styles.header,
+          { paddingTop: Math.max(insets.top + 12, Platform.OS === 'ios' ? 50 : 20) },
+        ]}
+      >
+        <TouchableOpacity
+          style={styles.closeButton}
+          onPress={() => {
+            stopDetection();
+            onClose();
+          }}
+        >
           <Text style={styles.closeButtonText}>Fermer</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
@@ -401,159 +418,168 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
         </View>
       </View>
 
-      {/* Informations du joueur */}
-      <View style={styles.playerInfo}>
-        <Text style={styles.playerName}>Tour de {currentPlayer}</Text>
-        <Text style={styles.dartCount}>
-          Flechettes: {currentDartCount}/{maxDarts}
-        </Text>
-      </View>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: insets.bottom + 24 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Informations du joueur */}
+        <View style={styles.playerInfo}>
+          <Text style={styles.playerName}>Tour de {currentPlayer}</Text>
+          <Text style={styles.dartCount}>
+            Flechettes: {currentDartCount}/{maxDarts}
+          </Text>
+        </View>
 
-      {/* Vue camera */}
-      <View style={styles.cameraContainer}>
-        <CameraView
-          ref={cameraRef}
-          style={styles.camera}
-          facing={facing}
-          onCameraReady={() => {
-            console.log('Caméra prête');
-            setIsCameraReady(true);
-          }}
-          onLayout={(event) => {
-            const { width, height } = event.nativeEvent.layout;
-            console.log('Layout caméra:', { width, height });
-            setCameraLayout({ width, height });
-          }}
-        >
-          {/* Bouton pour changer de caméra */}
-          <TouchableOpacity style={styles.flipButton} onPress={toggleCameraFacing}>
-            <RotateCcw size={20} color="#FFFFFF" />
-          </TouchableOpacity>
+        {/* Vue camera */}
+        <View style={[styles.cameraContainer, { minHeight: cameraHeight }]}>
+          <CameraView
+            ref={cameraRef}
+            style={styles.camera}
+            facing={facing}
+            onCameraReady={() => {
+              console.log('Caméra prête');
+              setIsCameraReady(true);
+            }}
+            onLayout={(event) => {
+              const { width, height } = event.nativeEvent.layout;
+              console.log('Layout caméra:', { width, height });
+              setCameraLayout({ width, height });
+            }}
+          >
+            {/* Bouton pour changer de caméra */}
+            <TouchableOpacity style={styles.flipButton} onPress={toggleCameraFacing}>
+              <RotateCcw size={20} color="#FFFFFF" />
+            </TouchableOpacity>
 
-          {/* Overlay de la cible */}
-          <View style={styles.targetOverlay}>
-            <View style={styles.targetCircle}>
-              <View style={styles.targetCenter} />
+            {/* Overlay de la cible */}
+            <View style={styles.targetOverlay}>
+              <View style={styles.targetCircle}>
+                <View style={styles.targetCenter} />
+              </View>
             </View>
+
+            {/* Flechettes detectees */}
+            {detectedDarts.map((dart, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.dartMarker,
+                  {
+                    left: dart.x,
+                    top: dart.y,
+                  }
+                ]}
+              >
+                <View style={styles.dartDot} />
+                <Text style={styles.dartScore}>{dart.score}</Text>
+              </View>
+            ))}
+
+            {/* Indicateur de traitement */}
+            {isProcessing && (
+              <View style={styles.processingOverlay}>
+                <ActivityIndicator size="small" color="#0F0F0F" />
+                <Text style={styles.processingText}>Analyse en cours...</Text>
+              </View>
+            )}
+
+            {/* Indicateur caméra non prête */}
+            {!isCameraReady && (
+              <View style={styles.cameraNotReadyOverlay}>
+                <ActivityIndicator size="large" color="#00FF41" />
+                <Text style={styles.cameraNotReadyText}>Initialisation de la caméra...</Text>
+              </View>
+            )}
+          </CameraView>
+        </View>
+
+        {/* Scores detectes */}
+        <View style={styles.scoresContainer}>
+          <Text style={styles.scoresTitle}>Scores detectes:</Text>
+          <View style={styles.scoresList}>
+            {detectedDarts.map((dart, index) => (
+              <View key={index} style={styles.scoreItem}>
+                <Text style={styles.scoreValue}>{dart.score}</Text>
+                <Text style={styles.scoreSector}>{dart.sector}</Text>
+              </View>
+            ))}
+            {Array.from({ length: maxDarts - detectedDarts.length }).map((_, index) => (
+              <View key={`empty-${index}`} style={[styles.scoreItem, styles.emptyScore]}>
+                <Text style={styles.emptyScoreText}>-</Text>
+              </View>
+            ))}
           </View>
+          <Text style={styles.totalScore}>
+            Total: {detectedDarts.reduce((sum, dart) => sum + dart.score, 0)}
+          </Text>
+        </View>
 
-          {/* Flechettes detectees */}
-          {detectedDarts.map((dart, index) => (
-            <View
-              key={index}
-              style={[
-                styles.dartMarker,
-                {
-                  left: dart.x,
-                  top: dart.y,
-                }
-              ]}
+        {/* Instructions */}
+        <View style={styles.instructions}>
+          <Text style={styles.instructionText}>
+            {!isDetecting
+              ? "Appuyez sur 'Demarrer' pour commencer la detection"
+              : "Lancez vos flechettes sur la cible. La detection est automatique."
+            }
+          </Text>
+          {detectionError && (
+            <Text style={styles.errorText}>{detectionError}</Text>
+          )}
+        </View>
+
+        {/* Controles */}
+        <View style={styles.controls}>
+          {!isDetecting ? (
+            <TouchableOpacity
+              style={[styles.startButton, (!isCameraReady || !permission?.granted) && styles.startButtonDisabled]}
+              onPress={startDetection}
+              disabled={!isCameraReady || !permission?.granted}
             >
-              <View style={styles.dartDot} />
-              <Text style={styles.dartScore}>{dart.score}</Text>
-            </View>
-          ))}
-
-          {/* Indicateur de traitement */}
-          {isProcessing && (
-            <View style={styles.processingOverlay}>
-              <ActivityIndicator size="small" color="#0F0F0F" />
-              <Text style={styles.processingText}>Analyse en cours...</Text>
-            </View>
+              <Play size={20} color="#0F0F0F" />
+              <Text style={styles.startButtonText}>
+                {!permission?.granted ? 'Autorisation requise' :
+                 !isCameraReady ? 'Caméra en cours...' :
+                 'Demarrer la detection'}
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.stopButton}
+              onPress={stopDetection}
+            >
+              <Pause size={20} color="#FFFFFF" />
+              <Text style={styles.stopButtonText}>Arreter</Text>
+            </TouchableOpacity>
           )}
 
-          {/* Indicateur caméra non prête */}
-          {!isCameraReady && (
-            <View style={styles.cameraNotReadyOverlay}>
-              <ActivityIndicator size="large" color="#00FF41" />
-              <Text style={styles.cameraNotReadyText}>Initialisation de la caméra...</Text>
-            </View>
-          )}
-        </CameraView>
-      </View>
+          <View style={styles.actionButtons}>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={removeLastDart}
+              disabled={detectedDarts.length === 0}
+            >
+              <RotateCcw size={16} color="#FF0041" />
+              <Text style={styles.actionButtonText}>Annuler</Text>
+            </TouchableOpacity>
 
-      {/* Scores detectes */}
-      <View style={styles.scoresContainer}>
-        <Text style={styles.scoresTitle}>Scores detectes:</Text>
-        <View style={styles.scoresList}>
-          {detectedDarts.map((dart, index) => (
-            <View key={index} style={styles.scoreItem}>
-              <Text style={styles.scoreValue}>{dart.score}</Text>
-              <Text style={styles.scoreSector}>{dart.sector}</Text>
-            </View>
-          ))}
-          {Array.from({ length: maxDarts - detectedDarts.length }).map((_, index) => (
-            <View key={`empty-${index}`} style={[styles.scoreItem, styles.emptyScore]}>
-              <Text style={styles.emptyScoreText}>-</Text>
-            </View>
-          ))}
+            <TouchableOpacity
+              style={[styles.actionButton, styles.completeButton]}
+              onPress={completeTurn}
+              disabled={detectedDarts.length === 0}
+            >
+              <CheckCircle size={16} color="#0F0F0F" />
+              <Text style={[styles.actionButtonText, styles.completeButtonText]}>
+                Terminer le tour
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
-        <Text style={styles.totalScore}>
-          Total: {detectedDarts.reduce((sum, dart) => sum + dart.score, 0)}
-        </Text>
-      </View>
-
-      {/* Instructions */}
-      <View style={styles.instructions}>
-        <Text style={styles.instructionText}>
-          {!isDetecting 
-            ? "Appuyez sur 'Demarrer' pour commencer la detection"
-            : "Lancez vos flechettes sur la cible. La detection est automatique."
-          }
-        </Text>
-        {detectionError && (
-          <Text style={styles.errorText}>{detectionError}</Text>
-        )}
-      </View>
-
-      {/* Controles */}
-      <View style={styles.controls}>
-        {!isDetecting ? (
-          <TouchableOpacity
-            style={[styles.startButton, (!isCameraReady || !permission?.granted) && styles.startButtonDisabled]}
-            onPress={startDetection}
-            disabled={!isCameraReady || !permission?.granted}
-          >
-            <Play size={20} color="#0F0F0F" />
-            <Text style={styles.startButtonText}>
-              {!permission?.granted ? 'Autorisation requise' : 
-               !isCameraReady ? 'Caméra en cours...' : 
-               'Demarrer la detection'}
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={styles.stopButton}
-            onPress={stopDetection}
-          >
-            <Pause size={20} color="#FFFFFF" />
-            <Text style={styles.stopButtonText}>Arreter</Text>
-          </TouchableOpacity>
-        )}
-
-        <View style={styles.actionButtons}>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={removeLastDart}
-            disabled={detectedDarts.length === 0}
-          >
-            <RotateCcw size={16} color="#FF0041" />
-            <Text style={styles.actionButtonText}>Annuler</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionButton, styles.completeButton]}
-            onPress={completeTurn}
-            disabled={detectedDarts.length === 0}
-          >
-            <CheckCircle size={16} color="#0F0F0F" />
-            <Text style={[styles.actionButtonText, styles.completeButtonText]}>
-              Terminer le tour
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
@@ -561,6 +587,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0F0F0F',
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 24,
   },
   loadingContainer: {
     flex: 1,
@@ -573,7 +605,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 20,
-    paddingTop: Platform.OS === 'ios' ? 50 : 20,
     borderBottomWidth: 1,
     borderBottomColor: '#1F1F1F',
   },
@@ -627,8 +658,8 @@ const styles = StyleSheet.create({
     color: '#00FF41',
   },
   cameraContainer: {
-    flex: 1,
-    margin: 20,
+    marginHorizontal: 20,
+    marginTop: 20,
     borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: '#1F1F1F',
@@ -717,6 +748,7 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: '#1F1F1F',
     marginHorizontal: 20,
+    marginTop: 20,
     borderRadius: 12,
   },
   scoresTitle: {
@@ -763,6 +795,7 @@ const styles = StyleSheet.create({
   instructions: {
     padding: 20,
     alignItems: 'center',
+    marginTop: 16,
   },
   instructionText: {
     fontSize: 14,
@@ -777,7 +810,8 @@ const styles = StyleSheet.create({
   },
   controls: {
     padding: 20,
-    paddingBottom: 40,
+    paddingBottom: 16,
+    marginTop: 16,
   },
   startButton: {
     flexDirection: 'row',
