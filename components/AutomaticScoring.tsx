@@ -16,7 +16,7 @@ import { Target, Plus, Minus, RotateCcw, Trophy, X, Camera } from 'lucide-react-
 import { CameraDartDetection } from './CameraDartDetection';
 
 const { width: screenWidth } = Dimensions.get('window');
-const FOOTER_HEIGHT = 84; // hauteur approximative de la barre d’actions
+const FOOTER_HEIGHT = 84;
 
 interface AutomaticScoringProps {
   visible: boolean;
@@ -241,13 +241,17 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
 
   return (
     <Modal visible={visible} transparent={false} animationType="slide">
-      <SafeAreaView style={[styles.container, { paddingBottom: 1 }]}>
-        {/* Scrollable content with extra bottom padding so footer never cache le contenu */}
+      <SafeAreaView style={[styles.container, { paddingBottom: 0 }]}>
+        {/* SCROLLVIEW — AJOUTS: style flex:1, flexGrow + nestedScrollEnabled */}
         <ScrollView
+          style={{ flex: 1 }}
           contentContainerStyle={{
-            paddingBottom: FOOTER_HEIGHT + insets.bottom + 34,
+            flexGrow: 1,
+            paddingBottom: FOOTER_HEIGHT + insets.bottom + 24,
           }}
           showsVerticalScrollIndicator={false}
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled"
         >
           {/* Header */}
           <View style={[styles.header, { paddingTop: Platform.OS === 'android' ? 20 : 0 }]}>
@@ -378,9 +382,7 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
           <View
             style={[
               styles.footer,
-              {
-                paddingBottom: insets.bottom + 22,
-              },
+              { paddingBottom: insets.bottom + 12 },
             ]}
           >
             <TouchableOpacity
@@ -429,244 +431,77 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0F0F0F',
-  },
+  container: { flex: 1, backgroundColor: '#0F0F0F' },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1F1F1F',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    padding: 20, borderBottomWidth: 1, borderBottomColor: '#1F1F1F',
   },
-  closeButton: {
-    backgroundColor: '#1F1F1F',
-    padding: 12,
-    borderRadius: 12,
-  },
-  headerCenter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  gameModeContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#1F1F1F',
-    borderRadius: 12,
-    padding: 4,
-  },
-  gameModeButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  activeModeButton: {
-    backgroundColor: '#00FF41',
-  },
-  gameModeText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#666666',
-  },
-  activeModeText: {
-    color: '#0F0F0F',
-  },
-  playersContainer: {
-    flexDirection: 'row',
-    padding: 20,
-    gap: 16,
-  },
+  closeButton: { backgroundColor: '#1F1F1F', padding: 12, borderRadius: 12 },
+  headerCenter: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#FFFFFF' },
+  gameModeContainer: { flexDirection: 'row', backgroundColor: '#1F1F1F', borderRadius: 12, padding: 4 },
+  gameModeButton: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
+  activeModeButton: { backgroundColor: '#00FF41' },
+  gameModeText: { fontSize: 14, fontWeight: 'bold', color: '#666666' },
+  activeModeText: { color: '#0F0F0F' },
+  playersContainer: { flexDirection: 'row', padding: 20, gap: 16 },
   playerCard: {
-    flex: 1,
-    backgroundColor: '#1F1F1F',
-    borderRadius: 16,
-    padding: 20,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#2A2A2A',
+    flex: 1, backgroundColor: '#1F1F1F', borderRadius: 16, padding: 20, alignItems: 'center',
+    borderWidth: 2, borderColor: '#2A2A2A',
   },
-  activePlayerCard: {
-    borderColor: '#00FF41',
-    backgroundColor: '#001A0A',
-  },
-  playerName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 8,
-  },
-  playerScore: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: '#00FF41',
-    marginBottom: 4,
-  },
-  playerAverage: {
-    fontSize: 14,
-    color: '#666666',
-  },
+  activePlayerCard: { borderColor: '#00FF41', backgroundColor: '#001A0A' },
+  playerName: { fontSize: 16, fontWeight: 'bold', color: '#FFFFFF', marginBottom: 8 },
+  playerScore: { fontSize: 36, fontWeight: 'bold', color: '#00FF41', marginBottom: 4 },
+  playerAverage: { fontSize: 14, color: '#666666' },
   winnerBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 12,
-    backgroundColor: '#FFD700',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12,
+    backgroundColor: '#FFD700', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20,
   },
-  winnerText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#0F0F0F',
-  },
-  vsContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-  },
-  vsText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#666666',
-  },
+  winnerText: { fontSize: 12, fontWeight: 'bold', color: '#0F0F0F' },
+  vsContainer: { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 8 },
+  vsText: { fontSize: 18, fontWeight: 'bold', color: '#666666' },
   currentTurnContainer: {
-    margin: 20,
-    backgroundColor: '#1F1F1F',
-    borderRadius: 16,
-    padding: 20,
-    alignItems: 'center',
+    margin: 20, backgroundColor: '#1F1F1F', borderRadius: 16, padding: 20, alignItems: 'center',
   },
-  currentTurnTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 16,
-  },
-  throwsContainer: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 12,
-  },
+  currentTurnTitle: { fontSize: 18, fontWeight: 'bold', color: '#FFFFFF', marginBottom: 16 },
+  throwsContainer: { flexDirection: 'row', gap: 12, marginBottom: 12 },
   throwBox: {
-    width: 60,
-    height: 60,
-    backgroundColor: '#2A2A2A',
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#3A3A3A',
+    width: 60, height: 60, backgroundColor: '#2A2A2A', borderRadius: 12, alignItems: 'center',
+    justifyContent: 'center', borderWidth: 2, borderColor: '#3A3A3A',
   },
-  activeThrowBox: {
-    borderColor: '#00FF41',
-    backgroundColor: '#001A0A',
-  },
-  throwScore: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  turnTotal: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#00FF41',
-  },
-  scoreButtonsContainer: {
-    padding: 20,
-  },
-  scoreGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    justifyContent: 'center',
-  },
+  activeThrowBox: { borderColor: '#00FF41', backgroundColor: '#001A0A' },
+  throwScore: { fontSize: 18, fontWeight: 'bold', color: '#FFFFFF' },
+  turnTotal: { fontSize: 16, fontWeight: 'bold', color: '#00FF41' },
+  scoreButtonsContainer: { padding: 20 },
+  scoreGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
   scoreButton: {
-    width: (screenWidth - 80) / 7,
-    height: 50,
-    backgroundColor: '#1F1F1F',
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#2A2A2A',
+    width: (screenWidth - 80) / 7, height: 50, backgroundColor: '#1F1F1F', borderRadius: 8,
+    alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#2A2A2A',
   },
-  scoreButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
+  scoreButtonText: { fontSize: 16, fontWeight: 'bold', color: '#FFFFFF' },
 
-  /* Nouveau footer collé */
   footer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 10, // le paddingBottom ajoute l’inset
-    backgroundColor: '#0F0F0F',
-    flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    height: FOOTER_HEIGHT + 12, // pour réserver la place
-    borderTopWidth: 1,
-    borderTopColor: '#1F1F1F',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 8,
+    position: 'absolute', left: 0, right: 0, bottom: 0,
+    backgroundColor: '#0F0F0F', flexDirection: 'row', gap: 12,
+    paddingHorizontal: 20, paddingTop: 12,
+    height: FOOTER_HEIGHT + 12,
+    borderTopWidth: 1, borderTopColor: '#1F1F1F',
+    shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 6, elevation: 8,
   },
-
   actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#1F1F1F',
-    paddingVertical: 14,
-    borderRadius: 12,
-    gap: 6,
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#1F1F1F', paddingVertical: 14, borderRadius: 12, gap: 6,
   },
-  confirmButton: {
-    backgroundColor: '#00FF41',
-  },
-  actionButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  confirmButtonText: {
-    color: '#0F0F0F',
-  },
+  confirmButton: { backgroundColor: '#00FF41' },
+  actionButtonText: { fontSize: 16, fontWeight: 'bold', color: '#FFFFFF' },
+  confirmButtonText: { color: '#0F0F0F' },
 
-  cameraContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 30,
-  },
+  cameraContainer: { paddingHorizontal: 20, paddingBottom: 30 },
   cameraButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#00FF41',
-    paddingVertical: 10,
-    borderRadius: 20,
-    gap: 8,
-    shadowColor: '#00FF41',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#00FF41', paddingVertical: 10, borderRadius: 20, gap: 8,
+    shadowColor: '#00FF41', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3,
+    shadowRadius: 4, elevation: 5,
   },
-  cameraButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#0F0F0F',
-  },
+  cameraButtonText: { fontSize: 16, fontWeight: 'bold', color: '#0F0F0F' },
 });
