@@ -113,13 +113,34 @@ const getExpoDevHost = () => {
   return undefined;
 };
 
+const isLikelyIpAddress = (value: string) => {
+  if (!value) return false;
+  const ipv4 = /^(?:\d{1,3}\.){3}\d{1,3}$/;
+  const ipv6 = /^(?:[a-f0-9]{0,4}:){2,7}[a-f0-9]{0,4}$/i;
+  return ipv4.test(value) || ipv6.test(value);
+};
+
+const isLikelyLanHostname = (value: string) => {
+  if (!value) return false;
+  return isLikelyIpAddress(value) || value.endsWith('.local');
+};
+
 const rewriteLocalhostUrl = (url: URL) => {
   if (!isLocalHostname(url.hostname)) {
     return url;
   }
 
   const expoHost = getExpoDevHost();
-  if (!expoHost) {
+  if (!expoHost || !isLikelyLanHostname(expoHost)) {
+    if (expoHost && !isLikelyLanHostname(expoHost)) {
+      console.warn(
+        "L'hôte Expo détecté ne ressemble pas à une IP locale. Conservation de 'localhost' pour éviter une requête tunnel impossible.",
+        {
+          original: url.hostname,
+          detectedHost: expoHost,
+        }
+      );
+    }
     return url;
   }
 
