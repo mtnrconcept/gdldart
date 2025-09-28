@@ -245,7 +245,7 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
         {/* Scrollable content with extra bottom padding so footer never cache le contenu */}
         <ScrollView
           contentContainerStyle={{
-            paddingBottom: FOOTER_HEIGHT + insets.bottom + 24,
+            paddingBottom: FOOTER_HEIGHT + insets.bottom + 34,
           }}
           showsVerticalScrollIndicator={false}
         >
