@@ -7,8 +7,9 @@ import {
   Alert,
   Dimensions,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import { Camera, RotateCcw, Target, Play, Pause, CircleCheck as CheckCircle } from 'lucide-react-native';
 
 import type { DartDetectionResult } from '@/types/dartDetection';
@@ -47,12 +48,15 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
   maxDarts = 3,
 }) => {
   const [permission, requestPermission] = useCameraPermissions();
+  const [facing, setFacing] = useState<CameraType>('back');
+  const [isCameraReady, setIsCameraReady] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
   const [detectedDarts, setDetectedDarts] = useState<DartDetectionResult[]>([]);
   const [currentDartCount, setCurrentDartCount] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [detectionError, setDetectionError] = useState<string | null>(null);
   const [cameraLayout, setCameraLayout] = useState({ width: 0, height: 0 });
+  const [permissionRequesting, setPermissionRequesting] = useState(false);
   const cameraRef = useRef<CameraView>(null);
   const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const detectionAbortController = useRef<AbortController | null>(null);
@@ -65,6 +69,7 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
   useEffect(() => {
     if (visible) {
       resetDetection();
+      setIsCameraReady(false);
     }
     return () => {
       if (detectionIntervalRef.current) {
@@ -99,6 +104,7 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
     isProcessingRef.current = false;
     setDetectionError(null);
     lastDetectionErrorRef.current = null;
+    setIsCameraReady(false);
     if (detectionIntervalRef.current) {
       clearInterval(detectionIntervalRef.current);
       detectionIntervalRef.current = null;
@@ -109,20 +115,51 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
     }
   };
 
-  const startDetection = async () => {
-    if (!permission?.granted) {
+  const handleRequestPermission = async () => {
+    console.log('Demande de permission caméra...');
+    setPermissionRequesting(true);
+    try {
       const response = await requestPermission();
-      if (!response?.granted) {
+      console.log('Réponse permission:', response);
+      if (response?.granted) {
+        console.log('Permission accordée');
+        Alert.alert('Succès', 'Accès à la caméra autorisé !');
+      } else {
+        console.log('Permission refusée');
+        Alert.alert('Permission refusée', 'L\'accès à la caméra est nécessaire pour la détection automatique.');
+      }
+    } catch (error) {
+      console.error('Erreur lors de la demande de permission:', error);
+      Alert.alert('Erreur', 'Impossible de demander l\'accès à la caméra.');
+    } finally {
+      setPermissionRequesting(false);
+    }
+  };
+
+  const startDetection = async () => {
+    console.log('Démarrage de la détection...');
+    if (!permission?.granted) {
+      console.log('Permission non accordée, demande...');
+      await handleRequestPermission();
+      if (!permission?.granted) {
+        console.log('Permission toujours non accordée');
         return;
       }
+    }
+
+    if (!isCameraReady) {
+      Alert.alert('Caméra non prête', 'Veuillez attendre que la caméra soit initialisée.');
+      return;
     }
 
     setDetectionError(null);
     lastDetectionErrorRef.current = null;
     setIsDetecting(true);
+    console.log('Détection démarrée');
   };
 
   const stopDetection = () => {
+    console.log('Arrêt de la détection');
     setIsDetecting(false);
     setIsProcessing(false);
     isProcessingRef.current = false;
@@ -151,8 +188,16 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
   }, [cameraLayout]);
 
   const captureAndAnalyze = useCallback(async () => {
-    if (!cameraRef.current || isProcessingRef.current) return;
+    if (!cameraRef.current || isProcessingRef.current || !isCameraReady) {
+      console.log('Capture impossible:', { 
+        hasCamera: !!cameraRef.current, 
+        isProcessing: isProcessingRef.current,
+        isCameraReady 
+      });
+      return;
+    }
 
+    console.log('Début capture et analyse...');
     setIsProcessing(true);
     isProcessingRef.current = true;
 
@@ -169,11 +214,15 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
         skipProcessing: true,
       });
 
+      console.log('Photo prise:', { hasBase64: !!photo?.base64 });
+
       if (!photo?.base64) {
+        console.log('Pas de données base64');
         return;
       }
 
       const remoteDetections = await detectDarts(photo.base64, { signal: controller.signal });
+      console.log('Détections reçues:', remoteDetections.length);
       const mappedDetections = convertDetections(remoteDetections);
 
       if (!mappedDetections.length) {
@@ -226,6 +275,7 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
         );
       });
     } catch (error) {
+      console.error('Erreur capture et analyse:', error);
       if (error instanceof Error && error.name === 'AbortError') {
         return;
       }
@@ -293,10 +343,17 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
     }
   };
 
+  const toggleCameraFacing = () => {
+    setFacing(current => (current === 'back' ? 'front' : 'back'));
+  };
+
   if (!permission) {
     return (
       <View style={styles.container}>
-        <Text style={styles.permissionText}>Chargement de la camera...</Text>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#00FF41" />
+          <Text style={styles.permissionText}>Chargement de la caméra...</Text>
+        </View>
       </View>
     );
   }
@@ -310,8 +367,16 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
           <Text style={styles.permissionText}>
             Pour detecter automatiquement les flechettes, nous avons besoin d'acceder a votre camera.
           </Text>
-          <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
-            <Text style={styles.permissionButtonText}>Autoriser la camera</Text>
+          <TouchableOpacity 
+            style={[styles.permissionButton, permissionRequesting && styles.permissionButtonDisabled]} 
+            onPress={handleRequestPermission}
+            disabled={permissionRequesting}
+          >
+            {permissionRequesting ? (
+              <ActivityIndicator size="small" color="#0F0F0F" />
+            ) : (
+              <Text style={styles.permissionButtonText}>Autoriser la camera</Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -349,12 +414,22 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
         <CameraView
           ref={cameraRef}
           style={styles.camera}
-          facing="back"
+          facing={facing}
+          onCameraReady={() => {
+            console.log('Caméra prête');
+            setIsCameraReady(true);
+          }}
           onLayout={(event) => {
             const { width, height } = event.nativeEvent.layout;
+            console.log('Layout caméra:', { width, height });
             setCameraLayout({ width, height });
           }}
         >
+          {/* Bouton pour changer de caméra */}
+          <TouchableOpacity style={styles.flipButton} onPress={toggleCameraFacing}>
+            <RotateCcw size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+
           {/* Overlay de la cible */}
           <View style={styles.targetOverlay}>
             <View style={styles.targetCircle}>
@@ -382,7 +457,16 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
           {/* Indicateur de traitement */}
           {isProcessing && (
             <View style={styles.processingOverlay}>
+              <ActivityIndicator size="small" color="#0F0F0F" />
               <Text style={styles.processingText}>Analyse en cours...</Text>
+            </View>
+          )}
+
+          {/* Indicateur caméra non prête */}
+          {!isCameraReady && (
+            <View style={styles.cameraNotReadyOverlay}>
+              <ActivityIndicator size="large" color="#00FF41" />
+              <Text style={styles.cameraNotReadyText}>Initialisation de la caméra...</Text>
             </View>
           )}
         </CameraView>
@@ -426,11 +510,16 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
       <View style={styles.controls}>
         {!isDetecting ? (
           <TouchableOpacity
-            style={styles.startButton}
+            style={[styles.startButton, (!isCameraReady || !permission?.granted) && styles.startButtonDisabled]}
             onPress={startDetection}
+            disabled={!isCameraReady || !permission?.granted}
           >
             <Play size={20} color="#0F0F0F" />
-            <Text style={styles.startButtonText}>Demarrer la detection</Text>
+            <Text style={styles.startButtonText}>
+              {!permission?.granted ? 'Autorisation requise' : 
+               !isCameraReady ? 'Caméra en cours...' : 
+               'Demarrer la detection'}
+            </Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
@@ -472,6 +561,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0F0F0F',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
   },
   header: {
     flexDirection: 'row',
@@ -594,9 +689,28 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
   },
   processingText: {
     color: '#0F0F0F',
+    fontWeight: 'bold',
+  },
+  cameraNotReadyOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+  },
+  cameraNotReadyText: {
+    color: '#FFFFFF',
+    fontSize: 16,
     fontWeight: 'bold',
   },
   scoresContainer: {
@@ -675,6 +789,10 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 16,
   },
+  startButtonDisabled: {
+    backgroundColor: '#666666',
+    opacity: 0.6,
+  },
   startButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
@@ -745,10 +863,22 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
   },
+  permissionButtonDisabled: {
+    opacity: 0.6,
+  },
   permissionButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#0F0F0F',
+  },
+  flipButton: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    padding: 12,
+    borderRadius: 25,
+    zIndex: 1,
   },
 });
 

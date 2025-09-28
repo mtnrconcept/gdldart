@@ -96,6 +96,8 @@ export const detectDarts = async (
     throw new DartDetectionError('Aucun endpoint de d\u00E9tection de fl\u00E9chettes n\'est configur\u00E9.');
   }
 
+  console.log('Envoi de l\'image pour détection...', { endpoint, imageSize: base64Image.length });
+
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -106,22 +108,31 @@ export const detectDarts = async (
       signal: options?.signal,
     });
 
+    console.log('Réponse du serveur:', response.status, response.statusText);
+
     if (!response.ok) {
       const text = await response.text();
+      console.error('Erreur serveur:', text);
       throw new DartDetectionError('\u00C9chec de la d\u00E9tection (HTTP ' + response.status + ')', text);
     }
 
     const payload = await response.json();
+    console.log('Payload reçu:', payload);
     const detections: unknown = payload?.detections ?? payload?.darts ?? payload?.results ?? payload;
 
     if (!Array.isArray(detections)) {
+      console.log('Aucune détection trouvée');
       return [];
     }
 
-    return detections
+    const results = detections
       .map((item) => toDetectionResult(item as RawDartDetection))
       .filter((item): item is DartDetectionResult => Boolean(item));
+    
+    console.log('Détections traitées:', results.length);
+    return results;
   } catch (error) {
+    console.error('Erreur lors de la détection:', error);
     if (error instanceof DartDetectionError) {
       throw error;
     }
