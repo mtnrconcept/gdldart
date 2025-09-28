@@ -8,10 +8,10 @@ import {
   Dimensions,
   Platform,
   ActivityIndicator,
-  ScrollView,
+  Modal,
 } from 'react-native';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
-import { Camera, RotateCcw, Target, Play, Pause, CircleCheck as CheckCircle } from 'lucide-react-native';
+import { Camera, RotateCcw, Target, Play, Pause, CircleCheck as CheckCircle, X } from 'lucide-react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { DartDetectionResult } from '@/types/dartDetection';
@@ -37,6 +37,9 @@ interface CameraDartDetectionProps {
   onDartDetected: (score: number) => void;
   onTurnComplete: (scores: number[]) => void;
   currentPlayer: string;
+  currentPlayerIndex: 1 | 2;
+  player1: { name: string; score: number };
+  player2: { name: string; score: number };
   maxDarts: number;
 }
 
@@ -47,6 +50,9 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
   onDartDetected,
   onTurnComplete,
   currentPlayer,
+  currentPlayerIndex,
+  player1,
+  player2,
   maxDarts = 3,
 }) => {
   const insets = useSafeAreaInsets();
@@ -176,6 +182,11 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
     }
   };
 
+  const handleClose = () => {
+    stopDetection();
+    onClose();
+  };
+
   const convertDetections = useCallback((detections: DartDetectionResult[]) => {
     const { width: fallbackWidth, height: fallbackHeight } = Dimensions.get('window');
     const width = cameraLayout.width || fallbackWidth;
@@ -303,7 +314,7 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
         detectionAbortController.current = null;
       }
     }
-  }, [convertDetections, maxDarts, onDartDetected]);
+  }, [convertDetections, isCameraReady, maxDarts, onDartDetected]);
 
   useEffect(() => {
     if (!isDetecting) {
@@ -350,236 +361,270 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
     setFacing(current => (current === 'back' ? 'front' : 'back'));
   };
 
-  const { height: windowHeight } = Dimensions.get('window');
-  const cameraHeight = Math.max(Math.min(windowHeight * 0.45, 420), 240);
-
-  if (!permission) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#00FF41" />
-          <Text style={styles.permissionText}>Chargement de la caméra...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (!permission.granted) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.permissionContainer}>
-          <Camera size={48} color="#666666" />
-          <Text style={styles.permissionTitle}>Acces a la camera requis</Text>
-          <Text style={styles.permissionText}>
-            Pour detecter automatiquement les flechettes, nous avons besoin d'acceder a votre camera.
-          </Text>
-          <TouchableOpacity 
-            style={[styles.permissionButton, permissionRequesting && styles.permissionButtonDisabled]} 
-            onPress={handleRequestPermission}
-            disabled={permissionRequesting}
-          >
-            {permissionRequesting ? (
-              <ActivityIndicator size="small" color="#0F0F0F" />
-            ) : (
-              <Text style={styles.permissionButtonText}>Autoriser la camera</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   if (!visible) return null;
 
-  return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View
-        style={[
-          styles.header,
-          { paddingTop: Math.max(insets.top + 12, Platform.OS === 'ios' ? 50 : 20) },
-        ]}
-      >
-        <TouchableOpacity
-          style={styles.closeButton}
-          onPress={() => {
-            stopDetection();
-            onClose();
-          }}
-        >
-          <Text style={styles.closeButtonText}>Fermer</Text>
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Target size={24} color="#00FF41" />
-          <Text style={styles.headerTitle}>Detection Automatique</Text>
+  const renderPermissionContent = () => {
+    if (!permission) {
+      return (
+        <View style={styles.permissionScreen}>
+          <TouchableOpacity style={styles.roundButton} onPress={handleClose}>
+            <X size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+          <View style={styles.permissionBody}>
+            <ActivityIndicator size="large" color="#00FF41" />
+            <Text style={styles.permissionText}>Chargement de la caméra...</Text>
+          </View>
         </View>
-        <View style={styles.gameModeIndicator}>
-          <Text style={styles.gameModeText}>{gameMode}</Text>
-        </View>
-      </View>
+      );
+    }
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: insets.bottom + 24 },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Informations du joueur */}
-        <View style={styles.playerInfo}>
-          <Text style={styles.playerName}>Tour de {currentPlayer}</Text>
-          <Text style={styles.dartCount}>
-            Flechettes: {currentDartCount}/{maxDarts}
-          </Text>
-        </View>
-
-        {/* Vue camera */}
-        <View style={[styles.cameraContainer, { minHeight: cameraHeight }]}>
-          <CameraView
-            ref={cameraRef}
-            style={styles.camera}
-            facing={facing}
-            onCameraReady={() => {
-              console.log('Caméra prête');
-              setIsCameraReady(true);
-            }}
-            onLayout={(event) => {
-              const { width, height } = event.nativeEvent.layout;
-              console.log('Layout caméra:', { width, height });
-              setCameraLayout({ width, height });
-            }}
-          >
-            {/* Bouton pour changer de caméra */}
-            <TouchableOpacity style={styles.flipButton} onPress={toggleCameraFacing}>
-              <RotateCcw size={20} color="#FFFFFF" />
+    if (!permission.granted) {
+      return (
+        <View style={styles.permissionScreen}>
+          <View style={styles.permissionHeader}>
+            <TouchableOpacity style={styles.roundButton} onPress={handleClose}>
+              <X size={20} color="#FFFFFF" />
             </TouchableOpacity>
-
-            {/* Overlay de la cible */}
-            <View style={styles.targetOverlay}>
-              <View style={styles.targetCircle}>
-                <View style={styles.targetCenter} />
-              </View>
-            </View>
-
-            {/* Flechettes detectees */}
-            {detectedDarts.map((dart, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.dartMarker,
-                  {
-                    left: dart.x,
-                    top: dart.y,
-                  }
-                ]}
-              >
-                <View style={styles.dartDot} />
-                <Text style={styles.dartScore}>{dart.score}</Text>
-              </View>
-            ))}
-
-            {/* Indicateur de traitement */}
-            {isProcessing && (
-              <View style={styles.processingOverlay}>
+          </View>
+          <View style={styles.permissionBody}>
+            <Camera size={48} color="#666666" />
+            <Text style={styles.permissionTitle}>Accès à la caméra requis</Text>
+            <Text style={styles.permissionText}>
+              Pour détecter automatiquement les fléchettes, nous avons besoin d'accéder à votre caméra.
+            </Text>
+            <TouchableOpacity
+              style={[styles.permissionButton, permissionRequesting && styles.permissionButtonDisabled]}
+              onPress={handleRequestPermission}
+              disabled={permissionRequesting}
+            >
+              {permissionRequesting ? (
                 <ActivityIndicator size="small" color="#0F0F0F" />
-                <Text style={styles.processingText}>Analyse en cours...</Text>
-              </View>
-            )}
-
-            {/* Indicateur caméra non prête */}
-            {!isCameraReady && (
-              <View style={styles.cameraNotReadyOverlay}>
-                <ActivityIndicator size="large" color="#00FF41" />
-                <Text style={styles.cameraNotReadyText}>Initialisation de la caméra...</Text>
-              </View>
-            )}
-          </CameraView>
-        </View>
-
-        {/* Scores detectes */}
-        <View style={styles.scoresContainer}>
-          <Text style={styles.scoresTitle}>Scores detectes:</Text>
-          <View style={styles.scoresList}>
-            {detectedDarts.map((dart, index) => (
-              <View key={index} style={styles.scoreItem}>
-                <Text style={styles.scoreValue}>{dart.score}</Text>
-                <Text style={styles.scoreSector}>{dart.sector}</Text>
-              </View>
-            ))}
-            {Array.from({ length: maxDarts - detectedDarts.length }).map((_, index) => (
-              <View key={`empty-${index}`} style={[styles.scoreItem, styles.emptyScore]}>
-                <Text style={styles.emptyScoreText}>-</Text>
-              </View>
-            ))}
-          </View>
-          <Text style={styles.totalScore}>
-            Total: {detectedDarts.reduce((sum, dart) => sum + dart.score, 0)}
-          </Text>
-        </View>
-
-        {/* Instructions */}
-        <View style={styles.instructions}>
-          <Text style={styles.instructionText}>
-            {!isDetecting
-              ? "Appuyez sur 'Demarrer' pour commencer la detection"
-              : "Lancez vos flechettes sur la cible. La detection est automatique."
-            }
-          </Text>
-          {detectionError && (
-            <Text style={styles.errorText}>{detectionError}</Text>
-          )}
-        </View>
-
-        {/* Controles */}
-        <View style={styles.controls}>
-          {!isDetecting ? (
-            <TouchableOpacity
-              style={[styles.startButton, (!isCameraReady || !permission?.granted) && styles.startButtonDisabled]}
-              onPress={startDetection}
-              disabled={!isCameraReady || !permission?.granted}
-            >
-              <Play size={20} color="#0F0F0F" />
-              <Text style={styles.startButtonText}>
-                {!permission?.granted ? 'Autorisation requise' :
-                 !isCameraReady ? 'Caméra en cours...' :
-                 'Demarrer la detection'}
-              </Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={styles.stopButton}
-              onPress={stopDetection}
-            >
-              <Pause size={20} color="#FFFFFF" />
-              <Text style={styles.stopButtonText}>Arreter</Text>
-            </TouchableOpacity>
-          )}
-
-          <View style={styles.actionButtons}>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={removeLastDart}
-              disabled={detectedDarts.length === 0}
-            >
-              <RotateCcw size={16} color="#FF0041" />
-              <Text style={styles.actionButtonText}>Annuler</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.actionButton, styles.completeButton]}
-              onPress={completeTurn}
-              disabled={detectedDarts.length === 0}
-            >
-              <CheckCircle size={16} color="#0F0F0F" />
-              <Text style={[styles.actionButtonText, styles.completeButtonText]}>
-                Terminer le tour
-              </Text>
+              ) : (
+                <Text style={styles.permissionButtonText}>Autoriser la caméra</Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>
-      </ScrollView>
-    </SafeAreaView>
+      );
+    }
+
+    return null;
+  };
+
+  const permissionContent = renderPermissionContent();
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="fullScreen"
+      onRequestClose={handleClose}
+    >
+      <SafeAreaView style={styles.container}>
+        {permissionContent ? (
+          permissionContent
+        ) : (
+          <View style={styles.cameraWrapper}>
+            <CameraView
+              ref={cameraRef}
+              style={styles.camera}
+              facing={facing}
+              onCameraReady={() => {
+                console.log('Caméra prête');
+                setIsCameraReady(true);
+              }}
+              onLayout={(event) => {
+                const { width, height } = event.nativeEvent.layout;
+                console.log('Layout caméra:', { width, height });
+                setCameraLayout({ width, height });
+              }}
+            >
+              <View
+                style={[
+                  styles.overlay,
+                  {
+                    paddingTop: Math.max(insets.top + 12, Platform.OS === 'ios' ? 32 : 20),
+                    paddingBottom: insets.bottom + 24,
+                  },
+                ]}
+                pointerEvents="box-none"
+              >
+                <View>
+                  <View style={styles.headerRow}>
+                    <TouchableOpacity style={styles.roundButton} onPress={handleClose}>
+                      <X size={20} color="#FFFFFF" />
+                    </TouchableOpacity>
+
+                    <View style={styles.headerCenter}>
+                      <Target size={24} color="#00FF41" />
+                      <Text style={styles.headerTitle}>Détection automatique</Text>
+                    </View>
+
+                    <View style={styles.headerActions}>
+                      <View style={styles.modeBadge}>
+                        <Text style={styles.modeBadgeText}>{gameMode}</Text>
+                      </View>
+                      <TouchableOpacity style={styles.roundButton} onPress={toggleCameraFacing}>
+                        <RotateCcw size={18} color="#FFFFFF" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <View style={styles.scoreBoard}>
+                    <View
+                      style={[
+                        styles.scoreCard,
+                        currentPlayerIndex === 1 && styles.activeScoreCard,
+                      ]}
+                    >
+                      <Text style={styles.scoreCardName}>{player1.name}</Text>
+                      <Text style={styles.scoreCardValue}>{player1.score}</Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.scoreCard,
+                        currentPlayerIndex === 2 && styles.activeScoreCard,
+                      ]}
+                    >
+                      <Text style={styles.scoreCardName}>{player2.name}</Text>
+                      <Text style={styles.scoreCardValue}>{player2.score}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.turnInfoRow}>
+                    <Text style={styles.turnInfoText}>Tour de {currentPlayer}</Text>
+                    <Text style={styles.turnInfoText}>
+                      Fléchettes : {currentDartCount}/{maxDarts}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.centerOverlay} pointerEvents="none">
+                  <View style={styles.targetOverlay}>
+                    <View style={styles.targetCircle}>
+                      <View style={styles.targetCenter} />
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.bottomSection} pointerEvents="box-none">
+                  <View style={styles.bottomPanel}>
+                    {isProcessing && (
+                      <View style={styles.processingBanner}>
+                        <ActivityIndicator size="small" color="#0F0F0F" />
+                        <Text style={styles.processingText}>Analyse en cours...</Text>
+                      </View>
+                    )}
+
+                    <View style={styles.detectedScoresContainer}>
+                      <Text style={styles.detectedScoresTitle}>Scores détectés</Text>
+                      <View style={styles.scoresList}>
+                        {detectedDarts.map((dart, index) => (
+                          <View key={index} style={styles.scoreItem}>
+                            <Text style={styles.scoreValue}>{dart.score}</Text>
+                            <Text style={styles.scoreSector}>{dart.sector}</Text>
+                          </View>
+                        ))}
+                        {Array.from({ length: maxDarts - detectedDarts.length }).map((_, index) => (
+                          <View key={`empty-${index}`} style={[styles.scoreItem, styles.emptyScore]}>
+                            <Text style={styles.emptyScoreText}>-</Text>
+                          </View>
+                        ))}
+                      </View>
+                      <Text style={styles.totalScore}>
+                        Total : {detectedDarts.reduce((sum, dart) => sum + dart.score, 0)}
+                      </Text>
+                    </View>
+
+                    <Text style={styles.instructionText}>
+                      {!isDetecting
+                        ? "Appuyez sur 'Démarrer' pour lancer la détection"
+                        : 'Lancez vos fléchettes, le score se mettra à jour automatiquement.'}
+                    </Text>
+
+                    {detectionError && (
+                      <Text style={styles.errorText}>{detectionError}</Text>
+                    )}
+
+                    <View style={styles.controlsRow}>
+                      {!isDetecting ? (
+                        <TouchableOpacity
+                          style={[
+                            styles.startButton,
+                            (!isCameraReady || !permission?.granted) && styles.startButtonDisabled,
+                          ]}
+                          onPress={startDetection}
+                          disabled={!isCameraReady || !permission?.granted}
+                        >
+                          <Play size={20} color="#0F0F0F" />
+                          <Text style={styles.startButtonText}>
+                            {!permission?.granted
+                              ? 'Autorisation requise'
+                              : !isCameraReady
+                                ? 'Caméra en cours...'
+                                : 'Démarrer la détection'}
+                          </Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity style={styles.stopButton} onPress={stopDetection}>
+                          <Pause size={20} color="#FFFFFF" />
+                          <Text style={styles.stopButtonText}>Arrêter</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+
+                    <View style={styles.actionButtons}>
+                      <TouchableOpacity
+                        style={styles.actionButton}
+                        onPress={removeLastDart}
+                        disabled={detectedDarts.length === 0}
+                      >
+                        <RotateCcw size={16} color="#FF0041" />
+                        <Text style={styles.actionButtonText}>Annuler</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.completeButton]}
+                        onPress={completeTurn}
+                        disabled={detectedDarts.length === 0}
+                      >
+                        <CheckCircle size={16} color="#0F0F0F" />
+                        <Text style={[styles.actionButtonText, styles.completeButtonText]}>
+                          Terminer le tour
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              </View>
+
+              {detectedDarts.map((dart, index) => (
+                <View
+                  key={index}
+                  style={[
+                    styles.dartMarker,
+                    {
+                      left: dart.x,
+                      top: dart.y,
+                    },
+                  ]}
+                >
+                  <View style={styles.dartDot} />
+                  <Text style={styles.dartScore}>{dart.score}</Text>
+                </View>
+              ))}
+
+              {!isCameraReady && (
+                <View style={styles.cameraNotReadyOverlay}>
+                  <ActivityIndicator size="large" color="#00FF41" />
+                  <Text style={styles.cameraNotReadyText}>Initialisation de la caméra...</Text>
+                </View>
+              )}
+            </CameraView>
+          </View>
+        )}
+      </SafeAreaView>
+    </Modal>
   );
 };
 
@@ -588,35 +633,76 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0F0F0F',
   },
-  scroll: {
+  permissionScreen: {
     flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 24,
-  },
-  loadingContainer: {
-    flex: 1,
+    width: '100%',
+    backgroundColor: '#0F0F0F',
+    paddingHorizontal: 24,
+    paddingVertical: 24,
     justifyContent: 'center',
+    alignItems: 'center',
+    gap: 32,
+  },
+  permissionHeader: {
+    alignSelf: 'stretch',
+    alignItems: 'flex-start',
+    marginTop: 12,
+  },
+  permissionBody: {
     alignItems: 'center',
     gap: 16,
   },
-  header: {
+  permissionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  permissionText: {
+    color: '#CCCCCC',
+    textAlign: 'center',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  permissionButton: {
+    backgroundColor: '#00FF41',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    minWidth: 200,
+    alignItems: 'center',
+  },
+  permissionButtonDisabled: {
+    opacity: 0.6,
+  },
+  permissionButtonText: {
+    color: '#0F0F0F',
+    fontWeight: '600',
+  },
+  roundButton: {
+    backgroundColor: 'rgba(15, 15, 15, 0.85)',
+    borderRadius: 24,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  cameraWrapper: {
+    flex: 1,
+    backgroundColor: '#000000',
+  },
+  camera: {
+    flex: 1,
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+  },
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1F1F1F',
-  },
-  closeButton: {
-    backgroundColor: '#1F1F1F',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 12,
-  },
-  closeButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
+    gap: 12,
   },
   headerCenter: {
     flexDirection: 'row',
@@ -628,224 +714,202 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FFFFFF',
   },
-  gameModeIndicator: {
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  modeBadge: {
     backgroundColor: '#00FF41',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: 999,
   },
-  gameModeText: {
+  modeBadgeText: {
     fontSize: 14,
     fontWeight: 'bold',
     color: '#0F0F0F',
   },
-  playerInfo: {
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#1F1F1F',
-    marginHorizontal: 20,
-    marginTop: 10,
-    borderRadius: 12,
+  scoreBoard: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
   },
-  playerName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 4,
-  },
-  dartCount: {
-    fontSize: 14,
-    color: '#00FF41',
-  },
-  cameraContainer: {
-    marginHorizontal: 20,
-    marginTop: 20,
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: '#1F1F1F',
-  },
-  camera: {
+  scoreCard: {
     flex: 1,
-    position: 'relative',
+    backgroundColor: 'rgba(15, 15, 15, 0.7)',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  activeScoreCard: {
+    borderColor: '#00FF41',
+    shadowColor: '#00FF41',
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 4,
+  },
+  scoreCardName: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  scoreCardValue: {
+    color: '#00FF41',
+    fontSize: 32,
+    fontWeight: 'bold',
+    marginTop: 4,
+  },
+  turnInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  turnInfoText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  centerOverlay: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   targetOverlay: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: [{ translateX: -100 }, { translateY: -100 }],
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   targetCircle: {
-    width: 200,
-    height: 200,
-    borderRadius: 100,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
     borderWidth: 2,
     borderColor: '#00FF41',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(15, 15, 15, 0.15)',
   },
   targetCenter: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: '#FF0041',
   },
-  dartMarker: {
-    position: 'absolute',
-    alignItems: 'center',
+  bottomSection: {
+    width: '100%',
   },
-  dartDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#FF0041',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
+  bottomPanel: {
+    backgroundColor: 'rgba(15, 15, 15, 0.85)',
+    borderRadius: 20,
+    padding: 20,
+    gap: 16,
   },
-  dartScore: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-    marginTop: 4,
-  },
-  processingOverlay: {
-    position: 'absolute',
-    top: 20,
-    left: 20,
-    right: 20,
-    backgroundColor: 'rgba(0, 255, 65, 0.9)',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
+  processingBanner: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    backgroundColor: '#00FF41',
+    borderRadius: 12,
+    paddingVertical: 8,
   },
   processingText: {
     color: '#0F0F0F',
     fontWeight: 'bold',
   },
-  cameraNotReadyOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
+  detectedScoresContainer: {
+    gap: 12,
   },
-  cameraNotReadyText: {
+  detectedScoresTitle: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
-  },
-  scoresContainer: {
-    padding: 20,
-    backgroundColor: '#1F1F1F',
-    marginHorizontal: 20,
-    marginTop: 20,
-    borderRadius: 12,
-  },
-  scoresTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 12,
   },
   scoresList: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 12,
+    gap: 12,
   },
   scoreItem: {
+    flex: 1,
     alignItems: 'center',
-    backgroundColor: '#2A2A2A',
-    padding: 12,
-    borderRadius: 8,
-    minWidth: 60,
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    gap: 4,
   },
   emptyScore: {
-    opacity: 0.5,
-  },
-  scoreValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#00FF41',
-    marginBottom: 4,
-  },
-  scoreSector: {
-    fontSize: 10,
-    color: '#666666',
+    opacity: 0.4,
   },
   emptyScoreText: {
-    fontSize: 18,
     color: '#666666',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  scoreValue: {
+    color: '#00FF41',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  scoreSector: {
+    color: '#9E9E9E',
+    fontSize: 12,
+    textAlign: 'center',
   },
   totalScore: {
-    fontSize: 18,
-    fontWeight: 'bold',
     color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
     textAlign: 'center',
-  },
-  instructions: {
-    padding: 20,
-    alignItems: 'center',
-    marginTop: 16,
   },
   instructionText: {
-    fontSize: 14,
-    color: '#666666',
-    textAlign: 'center',
-  },
-  errorText: {
-    marginTop: 8,
-    color: '#FF0041',
+    color: '#CCCCCC',
     fontSize: 13,
     textAlign: 'center',
+    lineHeight: 18,
   },
-  controls: {
-    padding: 20,
-    paddingBottom: 16,
-    marginTop: 16,
+  errorText: {
+    color: '#FF4D4F',
+    textAlign: 'center',
+  },
+  controlsRow: {
+    flexDirection: 'row',
   },
   startButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#00FF41',
-    paddingVertical: 16,
-    borderRadius: 12,
     gap: 8,
-    marginBottom: 16,
+    backgroundColor: '#00FF41',
+    paddingVertical: 14,
+    borderRadius: 12,
   },
   startButtonDisabled: {
-    backgroundColor: '#666666',
-    opacity: 0.6,
+    opacity: 0.5,
   },
   startButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
     color: '#0F0F0F',
+    fontWeight: 'bold',
+    fontSize: 14,
   },
   stopButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FF0041',
-    paddingVertical: 16,
-    borderRadius: 12,
     gap: 8,
-    marginBottom: 16,
+    backgroundColor: 'rgba(255, 0, 65, 0.85)',
+    paddingVertical: 14,
+    borderRadius: 12,
   },
   stopButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
     color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 14,
   },
   actionButtons: {
     flexDirection: 'row',
@@ -856,63 +920,59 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1F1F1F',
+    gap: 8,
     paddingVertical: 12,
     borderRadius: 12,
-    gap: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+  },
+  actionButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
   completeButton: {
     backgroundColor: '#00FF41',
   },
-  actionButtonText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
   completeButtonText: {
     color: '#0F0F0F',
   },
-  permissionContainer: {
-    flex: 1,
+  dartMarker: {
+    position: 'absolute',
+    alignItems: 'center',
+  },
+  dartDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#FF0041',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  dartScore: {
+    marginTop: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    color: '#FFFFFF',
+    borderRadius: 8,
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  cameraNotReadyOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 40,
+    gap: 16,
   },
-  permissionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+  cameraNotReadyText: {
     color: '#FFFFFF',
-    marginTop: 16,
-    marginBottom: 12,
-  },
-  permissionText: {
-    fontSize: 16,
-    color: '#666666',
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  permissionButton: {
-    backgroundColor: '#00FF41',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  permissionButtonDisabled: {
-    opacity: 0.6,
-  },
-  permissionButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#0F0F0F',
-  },
-  flipButton: {
-    position: 'absolute',
-    top: 20,
-    right: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    padding: 12,
-    borderRadius: 25,
-    zIndex: 1,
   },
 });
-
