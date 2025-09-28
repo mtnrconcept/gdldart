@@ -241,7 +241,7 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
 
   return (
     <Modal visible={visible} transparent={false} animationType="slide">
-      <SafeAreaView style={[styles.container, { paddingBottom: 0 }]}>
+      <SafeAreaView style={[styles.container, { paddingBottom: 1 }]}>
         {/* Scrollable content with extra bottom padding so footer never cache le contenu */}
         <ScrollView
           contentContainerStyle={{
