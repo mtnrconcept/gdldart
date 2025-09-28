@@ -55,6 +55,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       process.env.EXPO_PUBLIC_DART_DETECTION_URL,
       process.env.DART_DETECTION_URL,
       process.env.DEEP_DARTS_TUNNEL_URL ? `${process.env.DEEP_DARTS_TUNNEL_URL}` : null,
+      'http://192.168.0.18:8000/api/detect',
     ]) ?? localNetworkFallback();
 
   const base: ExpoConfig = {
