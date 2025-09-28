@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "EXPO_NO_TELEMETRY=1 npx expo start",
     "build:web": "npx expo export --platform web",
-    "lint": "eslint --ext .ts,.tsx ."
+    "lint": "eslint --ext .ts,.tsx .",
+    "tunnel:darts": "npx localtunnel --port 8000 --print-requests",
+    "dev:tunnel": "npm run tunnel:darts"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",

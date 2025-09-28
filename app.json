@@ -28,7 +28,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Cette application utilise la caméra pour détecter automatiquement les fléchettes sur la cible."
+          "cameraPermission": "Cette application utilise la camera pour detecter automatiquement les flechettes sur la cible."
         }
       ],
       [
@@ -42,13 +42,6 @@
     ],
     "experiments": {
       "typedRoutes": true
-    },
-    "extra": {
-      "dartDetection": {
-        "endpoint": "http://192.168.0.18:8000/api/detect"
-      },
-      "dartDetectionUrl": "http://192.168.0.18:8000/api/detect",
-      "EXPO_PUBLIC_DART_DETECTION_URL": "http://192.168.0.18:8000/api/detect"
     }
   }
 }
