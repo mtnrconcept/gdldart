@@ -13,11 +13,16 @@ import {
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import { Camera, RotateCcw, Target, Play, Pause, CircleCheck as CheckCircle, X } from 'lucide-react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 
 import type { DartDetectionResult } from '@/types/dartDetection';
 import { detectDarts, DartDetectionError } from '@/utils/dartDetection';
 
 const DUPLICATE_DISTANCE_THRESHOLD = 32;
+const STREAM_INTERVAL_MS = 1000;
+const MAX_RESIZED_WIDTH = 320;
+const FRAME_SAMPLE_COUNT = 96;
+const MIN_FRAME_CHANGE_RATIO = 0.12;
 
 const isSameDetection = (a: DartDetectionResult, b: DartDetectionResult) => {
   const dx = a.x - b.x;
@@ -73,6 +78,8 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
   const currentDartCountRef = useRef(0);
   const detectedDartsRef = useRef<DartDetectionResult[]>([]);
   const isProcessingRef = useRef(false);
+  const lastFrameSignatureRef = useRef<string | null>(null);
+  const autoStartAttemptedRef = useRef(false);
 
 
   useEffect(() => {
@@ -114,6 +121,8 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
     setDetectionError(null);
     lastDetectionErrorRef.current = null;
     setIsCameraReady(false);
+    lastFrameSignatureRef.current = null;
+    autoStartAttemptedRef.current = false;
     if (detectionIntervalRef.current) {
       clearInterval(detectionIntervalRef.current);
       detectionIntervalRef.current = null;
@@ -124,7 +133,7 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
     }
   };
 
-  const handleRequestPermission = async () => {
+  const handleRequestPermission = useCallback(async () => {
     console.log('Demande de permission caméra...');
     setPermissionRequesting(true);
     try {
@@ -133,24 +142,27 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
       if (response?.granted) {
         console.log('Permission accordée');
         Alert.alert('Succès', 'Accès à la caméra autorisé !');
+        return true;
       } else {
         console.log('Permission refusée');
         Alert.alert('Permission refusée', 'L\'accès à la caméra est nécessaire pour la détection automatique.');
+        return false;
       }
     } catch (error) {
       console.error('Erreur lors de la demande de permission:', error);
       Alert.alert('Erreur', 'Impossible de demander l\'accès à la caméra.');
+      return false;
     } finally {
       setPermissionRequesting(false);
     }
-  };
+  }, [requestPermission]);
 
-  const startDetection = async () => {
+  const startDetection = useCallback(async () => {
     console.log('Démarrage de la détection...');
     if (!permission?.granted) {
       console.log('Permission non accordée, demande...');
-      await handleRequestPermission();
-      if (!permission?.granted) {
+      const granted = await handleRequestPermission();
+      if (!granted && !permission?.granted) {
         console.log('Permission toujours non accordée');
         return;
       }
@@ -165,13 +177,14 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
     lastDetectionErrorRef.current = null;
     setIsDetecting(true);
     console.log('Détection démarrée');
-  };
+  }, [handleRequestPermission, isCameraReady, permission?.granted]);
 
-  const stopDetection = () => {
+  const stopDetection = useCallback(() => {
     console.log('Arrêt de la détection');
     setIsDetecting(false);
     setIsProcessing(false);
     isProcessingRef.current = false;
+    lastFrameSignatureRef.current = null;
     if (detectionIntervalRef.current) {
       clearInterval(detectionIntervalRef.current);
       detectionIntervalRef.current = null;
@@ -180,12 +193,48 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
       detectionAbortController.current.abort();
       detectionAbortController.current = null;
     }
-  };
+  }, []);
 
   const handleClose = () => {
     stopDetection();
     onClose();
   };
+
+  const hasSignificantFrameChange = useCallback((previous: string | null, current: string | null) => {
+    if (!current) {
+      return false;
+    }
+    if (!previous) {
+      return true;
+    }
+
+    const minLength = Math.min(previous.length, current.length);
+    if (!minLength) {
+      return true;
+    }
+
+    const step = Math.max(1, Math.floor(minLength / FRAME_SAMPLE_COUNT));
+    let diff = 0;
+    let samples = 0;
+    for (let i = 0; i < minLength; i += step) {
+      samples += 1;
+      if (previous.charCodeAt(i) !== current.charCodeAt(i)) {
+        diff += 1;
+      }
+      if (samples >= FRAME_SAMPLE_COUNT) {
+        break;
+      }
+    }
+
+    const ratio = samples ? diff / samples : 1;
+    if (ratio >= MIN_FRAME_CHANGE_RATIO) {
+      return true;
+    }
+
+    const lengthDelta = Math.abs(previous.length - current.length);
+    const normalizedDelta = lengthDelta / Math.max(previous.length, current.length);
+    return normalizedDelta >= MIN_FRAME_CHANGE_RATIO;
+  }, []);
 
   const convertDetections = useCallback((detections: DartDetectionResult[]) => {
     const { width: fallbackWidth, height: fallbackHeight } = Dimensions.get('window');
@@ -223,19 +272,44 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
 
     try {
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.8,
-        base64: true,
+        quality: 0.4,
+        base64: false,
         skipProcessing: true,
       });
 
-      console.log('Photo prise:', { hasBase64: !!photo?.base64 });
-
-      if (!photo?.base64) {
+      if (!photo?.uri) {
+        console.log('Photo sans URI');
         console.log('Pas de données base64');
         return;
       }
 
-      const remoteDetections = await detectDarts(photo.base64, { signal: controller.signal });
+      const resized = await manipulateAsync(
+        photo.uri,
+        [{ resize: { width: MAX_RESIZED_WIDTH } }],
+        {
+          compress: 0.5,
+          format: SaveFormat.JPEG,
+          base64: true,
+        }
+      );
+
+      const frameBase64 = resized.base64 ?? null;
+
+      console.log('Photo prise:', { hasBase64: !!frameBase64, width: resized.width, height: resized.height });
+
+      if (!frameBase64) {
+        console.log('Pas de données base64');
+        return;
+      }
+
+      if (!hasSignificantFrameChange(lastFrameSignatureRef.current, frameBase64)) {
+        console.log('Changement insuffisant détecté, envoi ignoré');
+        return;
+      }
+
+      lastFrameSignatureRef.current = frameBase64;
+
+      const remoteDetections = await detectDarts(frameBase64, { signal: controller.signal });
       console.log('Détections reçues:', remoteDetections.length);
       const mappedDetections = convertDetections(remoteDetections);
 
@@ -314,7 +388,7 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
         detectionAbortController.current = null;
       }
     }
-  }, [convertDetections, isCameraReady, maxDarts, onDartDetected]);
+  }, [convertDetections, hasSignificantFrameChange, isCameraReady, maxDarts, onDartDetected]);
 
   useEffect(() => {
     if (!isDetecting) {
@@ -331,7 +405,7 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
       if (currentDartCountRef.current < maxDarts && !isProcessingRef.current) {
         captureAndAnalyze();
       }
-    }, 2000);
+    }, STREAM_INTERVAL_MS);
 
     return () => {
       if (detectionIntervalRef.current) {
@@ -340,6 +414,18 @@ export const CameraDartDetection: React.FC<CameraDartDetectionProps> = ({
       }
     };
   }, [captureAndAnalyze, isDetecting, maxDarts]);
+
+  useEffect(() => {
+    if (!visible) {
+      autoStartAttemptedRef.current = false;
+      return;
+    }
+
+    if (permission?.granted && isCameraReady && !isDetecting && !autoStartAttemptedRef.current) {
+      autoStartAttemptedRef.current = true;
+      startDetection();
+    }
+  }, [isCameraReady, isDetecting, permission?.granted, startDetection, visible]);
 
   const completeTurn = () => {
     const scores = detectedDarts.map(dart => dart.score);
