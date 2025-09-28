@@ -4,3 +4,5 @@ yacs
 pandas
 yolov4==2.0.3
 matplotlib
+fastapi
+uvicorn[standard]

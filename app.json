@@ -45,8 +45,9 @@
     },
     "extra": {
       "dartDetection": {
-        "endpoint": "https://deep-darts.fly.dev/api/detect"
-      }
+        "endpoint": "http://localhost:8000/api/detect"
+      },
+      "EXPO_PUBLIC_DART_DETECTION_URL": "http://localhost:8000/api/detect"
     }
   }
 }
