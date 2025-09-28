@@ -424,6 +424,9 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
         onDartDetected={handleCameraDartDetected}
         onTurnComplete={handleCameraTurnComplete}
         currentPlayer={currentPlayer === 1 ? match.player1?.name || 'Joueur 1' : match.player2?.name || 'Joueur 2'}
+        currentPlayerIndex={currentPlayer}
+        player1={{ name: match.player1?.name || 'Joueur 1', score: player1Score.currentScore }}
+        player2={{ name: match.player2?.name || 'Joueur 2', score: player2Score.currentScore }}
         maxDarts={3}
       />
     </Modal>
