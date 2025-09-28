@@ -379,7 +379,7 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
             style={[
               styles.footer,
               {
-                paddingBottom: insets.bottom + 12,
+                paddingBottom: insets.bottom + 22,
               },
             ]}
           >
