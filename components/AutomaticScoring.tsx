@@ -7,12 +7,16 @@ import {
   TouchableOpacity,
   Dimensions,
   Alert,
+  ScrollView,
+  Platform,
 } from 'react-native';
+import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { Match, Player } from '@/types/tournament';
 import { Target, Plus, Minus, RotateCcw, Trophy, X, Camera } from 'lucide-react-native';
 import { CameraDartDetection } from './CameraDartDetection';
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+const { width: screenWidth } = Dimensions.get('window');
+const FOOTER_HEIGHT = 84; // hauteur approximative de la barre d’actions
 
 interface AutomaticScoringProps {
   visible: boolean;
@@ -34,6 +38,8 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
   onClose,
   onSubmit,
 }) => {
+  const insets = useSafeAreaInsets();
+
   const [gameMode, setGameMode] = useState<'501' | '301'>('501');
   const [player1Score, setPlayer1Score] = useState<PlayerScore>({
     currentScore: 501,
@@ -83,7 +89,6 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
 
   const addScore = (points: number) => {
     if (gameFinished || currentThrow >= 3) return;
-
     const newThrowScores = [...throwScores];
     newThrowScores[currentThrow] = points;
     setThrowScores(newThrowScores);
@@ -106,20 +111,16 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
     const currentPlayerScore = currentPlayer === 1 ? player1Score : player2Score;
     const newScore = currentPlayerScore.currentScore - turnTotal;
 
-    // Vérifier si le score est valide (pas en dessous de 0, et doit finir sur un double pour 501)
     if (newScore < 0 || (gameMode === '501' && newScore === 1)) {
-      // Bust - le tour est annulé
       Alert.alert('Bust!', 'Score invalide. Le tour est annulé.');
     } else if (newScore === 0) {
-      // Victoire !
       const winningPlayer = currentPlayer === 1 ? match.player1! : match.player2!;
       setWinner(winningPlayer);
       setGameFinished(true);
-      
-      // Calculer les scores finaux
+
       const finalPlayer1Score = currentPlayer === 1 ? 0 : player1Score.currentScore;
       const finalPlayer2Score = currentPlayer === 2 ? 0 : player2Score.currentScore;
-      
+
       Alert.alert(
         'Victoire !',
         `${winningPlayer.name} a gagné !`,
@@ -137,11 +138,11 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
       );
       return;
     } else {
-      // Score valide, mettre à jour
       const newThrows = [...currentPlayerScore.throws, ...throwScores.filter(s => s > 0)];
       const newTotalThrows = currentPlayerScore.totalThrows + throwScores.filter(s => s > 0).length;
-      const newAverage = newTotalThrows > 0 ? 
-        ((gameMode === '501' ? 501 : 301) - newScore) / (newTotalThrows / 3) : 0;
+      const newAverage = newTotalThrows > 0
+        ? ((gameMode === '501' ? 501 : 301) - newScore) / (newTotalThrows / 3)
+        : 0;
 
       if (currentPlayer === 1) {
         setPlayer1Score({
@@ -160,7 +161,6 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
       }
     }
 
-    // Passer au joueur suivant
     setCurrentPlayer(currentPlayer === 1 ? 2 : 1);
     setCurrentThrow(0);
     setThrowScores([0, 0, 0]);
@@ -172,20 +172,17 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
   };
 
   const handleCameraTurnComplete = (scores: number[]) => {
-    // Appliquer tous les scores du tour
     const turnTotal = scores.reduce((sum, score) => sum + score, 0);
     const currentPlayerScore = currentPlayer === 1 ? player1Score : player2Score;
     const newScore = currentPlayerScore.currentScore - turnTotal;
 
-    // Vérifier si le score est valide
     if (newScore < 0 || (gameMode === '501' && newScore === 1)) {
       Alert.alert('Bust!', 'Score invalide. Le tour est annulé.');
     } else if (newScore === 0) {
-      // Victoire !
       const winningPlayer = currentPlayer === 1 ? match.player1! : match.player2!;
       setWinner(winningPlayer);
       setGameFinished(true);
-      
+
       Alert.alert(
         'Victoire !',
         `${winningPlayer.name} a gagné !`,
@@ -195,7 +192,7 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
             onPress: () => {
               const finalPlayer1Score = currentPlayer === 1 ? 0 : player1Score.currentScore;
               const finalPlayer2Score = currentPlayer === 2 ? 0 : player2Score.currentScore;
-              
+
               onSubmit(winningPlayer, {
                 player1Score: gameMode === '501' ? 501 - finalPlayer1Score : 301 - finalPlayer1Score,
                 player2Score: gameMode === '501' ? 501 - finalPlayer2Score : 301 - finalPlayer2Score,
@@ -206,11 +203,11 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
       );
       return;
     } else {
-      // Score valide, mettre à jour
       const newThrows = [...currentPlayerScore.throws, ...scores];
       const newTotalThrows = currentPlayerScore.totalThrows + scores.length;
-      const newAverage = newTotalThrows > 0 ? 
-        ((gameMode === '501' ? 501 : 301) - newScore) / (newTotalThrows / 3) : 0;
+      const newAverage = newTotalThrows > 0
+        ? ((gameMode === '501' ? 501 : 301) - newScore) / (newTotalThrows / 3)
+        : 0;
 
       if (currentPlayer === 1) {
         setPlayer1Score({
@@ -229,7 +226,6 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
       }
     }
 
-    // Passer au joueur suivant
     setCurrentPlayer(currentPlayer === 1 ? 2 : 1);
     setCurrentThrow(0);
     setThrowScores([0, 0, 0]);
@@ -241,139 +237,152 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
     22, 24, 26, 27, 28, 30, 32, 33, 34, 36, 38, 39, 40, 42, 45, 48, 50, 51, 54, 57, 60
   ];
 
-  if (!match.player1 || !match.player2) {
-    return null;
-  }
+  if (!match.player1 || !match.player2) return null;
 
   return (
     <Modal visible={visible} transparent={false} animationType="slide">
-      <View style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-            <X size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-          <View style={styles.headerCenter}>
-            <Target size={24} color="#00FF41" />
-            <Text style={styles.headerTitle}>Comptage Automatique</Text>
+      <SafeAreaView style={[styles.container, { paddingBottom: 0 }]}>
+        {/* Scrollable content with extra bottom padding so footer never cache le contenu */}
+        <ScrollView
+          contentContainerStyle={{
+            paddingBottom: FOOTER_HEIGHT + insets.bottom + 24,
+          }}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Header */}
+          <View style={[styles.header, { paddingTop: Platform.OS === 'android' ? 20 : 0 }]}>
+            <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+              <X size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+            <View style={styles.headerCenter}>
+              <Target size={24} color="#00FF41" />
+              <Text style={styles.headerTitle}>Comptage Automatique</Text>
+            </View>
+            <View style={styles.gameModeContainer}>
+              <TouchableOpacity
+                style={[styles.gameModeButton, gameMode === '501' && styles.activeModeButton]}
+                onPress={() => setGameMode('501')}
+              >
+                <Text style={[styles.gameModeText, gameMode === '501' && styles.activeModeText]}>
+                  501
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.gameModeButton, gameMode === '301' && styles.activeModeButton]}
+                onPress={() => setGameMode('301')}
+              >
+                <Text style={[styles.gameModeText, gameMode === '301' && styles.activeModeText]}>
+                  301
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
-          <View style={styles.gameModeContainer}>
-            <TouchableOpacity
-              style={[styles.gameModeButton, gameMode === '501' && styles.activeModeButton]}
-              onPress={() => setGameMode('501')}
-            >
-              <Text style={[styles.gameModeText, gameMode === '501' && styles.activeModeText]}>
-                501
+
+          {/* Scores des joueurs */}
+          <View style={styles.playersContainer}>
+            <View style={[
+              styles.playerCard,
+              currentPlayer === 1 && !gameFinished && styles.activePlayerCard
+            ]}>
+              <Text style={styles.playerName}>{match.player1.name}</Text>
+              <Text style={styles.playerScore}>{player1Score.currentScore}</Text>
+              <Text style={styles.playerAverage}>
+                Moy: {player1Score.average.toFixed(1)}
               </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.gameModeButton, gameMode === '301' && styles.activeModeButton]}
-              onPress={() => setGameMode('301')}
-            >
-              <Text style={[styles.gameModeText, gameMode === '301' && styles.activeModeText]}>
-                301
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Scores des joueurs */}
-        <View style={styles.playersContainer}>
-          <View style={[
-            styles.playerCard,
-            currentPlayer === 1 && !gameFinished && styles.activePlayerCard
-          ]}>
-            <Text style={styles.playerName}>{match.player1.name}</Text>
-            <Text style={styles.playerScore}>{player1Score.currentScore}</Text>
-            <Text style={styles.playerAverage}>
-              Moy: {player1Score.average.toFixed(1)}
-            </Text>
-            {winner?.id === match.player1.id && (
-              <View style={styles.winnerBadge}>
-                <Trophy size={20} color="#FFD700" />
-                <Text style={styles.winnerText}>GAGNANT</Text>
-              </View>
-            )}
-          </View>
-
-          <View style={styles.vsContainer}>
-            <Text style={styles.vsText}>VS</Text>
-          </View>
-
-          <View style={[
-            styles.playerCard,
-            currentPlayer === 2 && !gameFinished && styles.activePlayerCard
-          ]}>
-            <Text style={styles.playerName}>{match.player2.name}</Text>
-            <Text style={styles.playerScore}>{player2Score.currentScore}</Text>
-            <Text style={styles.playerAverage}>
-              Moy: {player2Score.average.toFixed(1)}
-            </Text>
-            {winner?.id === match.player2.id && (
-              <View style={styles.winnerBadge}>
-                <Trophy size={20} color="#FFD700" />
-                <Text style={styles.winnerText}>GAGNANT</Text>
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* Bouton caméra */}
-        {!gameFinished && (
-          <View style={styles.cameraContainer}>
-            <TouchableOpacity
-              style={styles.cameraButton}
-              onPress={() => setShowCameraDetection(true)}
-            >
-              <Camera size={20} color="#0F0F0F" />
-              <Text style={styles.cameraButtonText}>Détection Caméra</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Tour actuel */}
-        {!gameFinished && (
-          <View style={styles.currentTurnContainer}>
-            <Text style={styles.currentTurnTitle}>
-              Tour de {currentPlayer === 1 ? match.player1.name : match.player2.name}
-            </Text>
-            <View style={styles.throwsContainer}>
-              {throwScores.map((score, index) => (
-                <View key={index} style={[
-                  styles.throwBox,
-                  index === currentThrow && styles.activeThrowBox
-                ]}>
-                  <Text style={styles.throwScore}>{score || '-'}</Text>
+              {winner?.id === match.player1.id && (
+                <View style={styles.winnerBadge}>
+                  <Trophy size={20} color="#FFD700" />
+                  <Text style={styles.winnerText}>GAGNANT</Text>
                 </View>
-              ))}
+              )}
             </View>
-            <Text style={styles.turnTotal}>
-              Total: {throwScores.reduce((sum, score) => sum + score, 0)}
-            </Text>
-          </View>
-        )}
 
-        {/* Boutons de score */}
-        {!gameFinished && (
-          <View style={styles.scoreButtonsContainer}>
-            <View style={styles.scoreGrid}>
-              {scoreButtons.map((score) => (
-                <TouchableOpacity
-                  key={score}
-                  style={styles.scoreButton}
-                  onPress={() => addScore(score)}
-                  disabled={currentThrow >= 3}
-                >
-                  <Text style={styles.scoreButtonText}>{score}</Text>
-                </TouchableOpacity>
-              ))}
+            <View style={styles.vsContainer}>
+              <Text style={styles.vsText}>VS</Text>
+            </View>
+
+            <View style={[
+              styles.playerCard,
+              currentPlayer === 2 && !gameFinished && styles.activePlayerCard
+            ]}>
+              <Text style={styles.playerName}>{match.player2.name}</Text>
+              <Text style={styles.playerScore}>{player2Score.currentScore}</Text>
+              <Text style={styles.playerAverage}>
+                Moy: {player2Score.average.toFixed(1)}
+              </Text>
+              {winner?.id === match.player2.id && (
+                <View style={styles.winnerBadge}>
+                  <Trophy size={20} color="#FFD700" />
+                  <Text style={styles.winnerText}>GAGNANT</Text>
+                </View>
+              )}
             </View>
           </View>
-        )}
 
-        {/* Actions */}
+          {/* Bouton caméra */}
+          {!gameFinished && (
+            <View style={styles.cameraContainer}>
+              <TouchableOpacity
+                style={styles.cameraButton}
+                onPress={() => setShowCameraDetection(true)}
+              >
+                <Camera size={20} color="#0F0F0F" />
+                <Text style={styles.cameraButtonText}>Détection Caméra</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Tour actuel */}
+          {!gameFinished && (
+            <View style={styles.currentTurnContainer}>
+              <Text style={styles.currentTurnTitle}>
+                Tour de {currentPlayer === 1 ? match.player1.name : match.player2.name}
+              </Text>
+              <View style={styles.throwsContainer}>
+                {throwScores.map((score, index) => (
+                  <View key={index} style={[
+                    styles.throwBox,
+                    index === currentThrow && styles.activeThrowBox
+                  ]}>
+                    <Text style={styles.throwScore}>{score || '-'}</Text>
+                  </View>
+                ))}
+              </View>
+              <Text style={styles.turnTotal}>
+                Total: {throwScores.reduce((sum, score) => sum + score, 0)}
+              </Text>
+            </View>
+          )}
+
+          {/* Boutons de score */}
+          {!gameFinished && (
+            <View style={styles.scoreButtonsContainer}>
+              <View style={styles.scoreGrid}>
+                {scoreButtons.map((score) => (
+                  <TouchableOpacity
+                    key={score}
+                    style={styles.scoreButton}
+                    onPress={() => addScore(score)}
+                    disabled={currentThrow >= 3}
+                  >
+                    <Text style={styles.scoreButtonText}>{score}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
+        </ScrollView>
+
+        {/* Footer collé en bas */}
         {!gameFinished && (
-          <View style={styles.actionsContainer}>
+          <View
+            style={[
+              styles.footer,
+              {
+                paddingBottom: insets.bottom + 12,
+              },
+            ]}
+          >
             <TouchableOpacity
               style={styles.actionButton}
               onPress={removeLastThrow}
@@ -403,7 +412,7 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
             </TouchableOpacity>
           </View>
         )}
-      </View>
+      </SafeAreaView>
 
       {/* Détection par caméra */}
       <CameraDartDetection
@@ -429,7 +438,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 20,
-    paddingTop: 50,
     borderBottomWidth: 1,
     borderBottomColor: '#1F1F1F',
   },
@@ -572,7 +580,6 @@ const styles = StyleSheet.create({
     color: '#00FF41',
   },
   scoreButtonsContainer: {
-    flex: 1,
     padding: 20,
   },
   scoreGrid: {
@@ -596,19 +603,34 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FFFFFF',
   },
-  actionsContainer: {
+
+  /* Nouveau footer collé */
+  footer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0, // le paddingBottom ajoute l’inset
+    backgroundColor: '#0F0F0F',
     flexDirection: 'row',
-    padding: 20,
     gap: 12,
-    paddingBottom: 40,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    height: FOOTER_HEIGHT + 12, // pour réserver la place
+    borderTopWidth: 1,
+    borderTopColor: '#1F1F1F',
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 8,
   },
+
   actionButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#1F1F1F',
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderRadius: 12,
     gap: 6,
   },
@@ -623,6 +645,7 @@ const styles = StyleSheet.create({
   confirmButtonText: {
     color: '#0F0F0F',
   },
+
   cameraContainer: {
     paddingHorizontal: 20,
     paddingBottom: 30,
@@ -636,10 +659,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     gap: 8,
     shadowColor: '#00FF41',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 5,
