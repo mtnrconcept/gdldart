@@ -625,7 +625,7 @@ const styles = StyleSheet.create({
   },
   cameraContainer: {
     paddingHorizontal: 20,
-    paddingBottom: 10,
+    paddingBottom: 20,
   },
   cameraButton: {
     flexDirection: 'row',
@@ -633,7 +633,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#00FF41',
     paddingVertical: 10,
-    borderRadius: 10,
+    borderRadius: 20,
     gap: 8,
     shadowColor: '#00FF41',
     shadowOffset: {
