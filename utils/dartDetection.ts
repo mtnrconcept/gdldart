@@ -1,8 +1,6 @@
 import Constants from 'expo-constants';
 import { DartDetectionResult, RawDartDetection } from '@/types/dartDetection';
 
-const DEFAULT_ENDPOINT = 'https://deep-darts.fly.dev/api/detect';
-
 export class DartDetectionError extends Error {
   constructor(message: string, readonly cause?: unknown) {
     super(message);
@@ -10,7 +8,43 @@ export class DartDetectionError extends Error {
   }
 }
 
-const toDataUri = (image: string) => (image.startsWith('data:') ? image : 'data:image/jpeg;base64,' + image);
+const DEFAULT_ENDPOINT = 'https://deep-darts.fly.dev/api/detect';
+
+const DETECT_URL =
+  ((Constants.expoConfig?.extra as any)?.dartDetectionUrl ??
+    (Constants.expoConfig?.extra as any)?.dartDetection?.endpoint ??
+    process.env.EXPO_PUBLIC_DART_DETECTION_URL ??
+    DEFAULT_ENDPOINT) as string | undefined;
+
+function assertUrl(u?: string): asserts u is string {
+  if (!u || !/^https?:\/\/.+/i.test(u)) {
+    throw new DartDetectionError(
+      `URL de détection invalide. Configure EXPO_PUBLIC_DART_DETECTION_URL (ex: http://192.168.0.18:8000/api/detect).`
+    );
+  }
+}
+assertUrl(DETECT_URL);
+
+async function fetchWithTimeout(
+  input: RequestInfo,
+  init: RequestInit & { timeoutMs?: number } = {}
+) {
+  const { timeoutMs = 25000, ...rest } = init;
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(input, { ...rest, signal: ctrl.signal });
+    return res;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+function buildJsonHeaders(token?: string): Record<string, string> {
+  const h: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) h.Authorization = `Bearer ${token}`;
+  return h;
+}
 
 const normalizeMultiplier = (value?: string) => {
   if (!value) return 'simple';
@@ -80,203 +114,48 @@ const toDetectionResult = (detection: RawDartDetection): DartDetectionResult | n
   };
 };
 
-const isAbsoluteUrl = (value: string) => /^https?:\/\//i.test(value);
-
-const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
-
-const isLocalHostname = (value?: string) => {
-  if (!value) return false;
-  const lower = value.toLowerCase();
-  return LOCAL_HOSTNAMES.has(lower) || lower.endsWith('.localhost');
+export type DetectPayload = {
+  image: string;
+  width?: number;
+  height?: number;
+  mode?: '501' | '301';
 };
 
-const getExpoDevHost = () => {
-  const expoGo = Constants.expoGoConfig as { debuggerHost?: string; hostUri?: string } | undefined;
-  const expoConfig = Constants.expoConfig as { hostUri?: string } | undefined;
-  const manifest = (Constants as unknown as { manifest?: { debuggerHost?: string; hostUri?: string } }).manifest;
-  const candidates = [
-    expoGo?.debuggerHost,
-    expoGo?.hostUri,
-    expoConfig?.hostUri,
-    manifest?.debuggerHost,
-    manifest?.hostUri,
-  ].filter(Boolean) as string[];
-
-  for (const candidate of candidates) {
-    const host = candidate.split('://').pop() ?? candidate;
-    const [hostname] = host.split(':');
-    if (hostname && !isLocalHostname(hostname)) {
-      return hostname;
-    }
-  }
-
-  return undefined;
-};
-
-const isLikelyIpAddress = (value: string) => {
-  if (!value) return false;
-  const ipv4 = /^(?:\d{1,3}\.){3}\d{1,3}$/;
-  const ipv6 = /^(?:[a-f0-9]{0,4}:){2,7}[a-f0-9]{0,4}$/i;
-  return ipv4.test(value) || ipv6.test(value);
-};
-
-const isLikelyLanHostname = (value: string) => {
-  if (!value) return false;
-  return isLikelyIpAddress(value) || value.endsWith('.local');
-};
-
-const rewriteLocalhostUrl = (url: URL) => {
-  if (!isLocalHostname(url.hostname)) {
-    return url;
-  }
-
-  const expoHost = getExpoDevHost();
-  if (!expoHost || !isLikelyLanHostname(expoHost)) {
-    if (expoHost && !isLikelyLanHostname(expoHost)) {
-      console.warn(
-        "L'hôte Expo détecté ne ressemble pas à une IP locale. Conservation de 'localhost' pour éviter une requête tunnel impossible.",
-        {
-          original: url.hostname,
-          detectedHost: expoHost,
-        }
-      );
-    }
-    return url;
-  }
-
-  console.warn('Remplacement de l\'hôte "localhost" par l\'IP Expo détectée pour la détection.', {
-    original: url.hostname,
-    replacement: expoHost,
-  });
-
-  url.hostname = expoHost;
-  return url;
-};
-
-const resolveEndpoint = (endpoint: string) => {
-  if (!endpoint) {
-    return endpoint;
-  }
-
-  if (isAbsoluteUrl(endpoint)) {
-    try {
-      const url = rewriteLocalhostUrl(new URL(endpoint));
-      return url.toString();
-    } catch (error) {
-      console.warn("Impossible d'analyser l'URL absolue fournie pour la détection.", {
-        endpoint,
-        error,
-      });
-      return endpoint;
-    }
-  }
-
-  if (typeof window !== 'undefined' && window.location) {
-    try {
-      return new URL(endpoint, window.location.origin).toString();
-    } catch (error) {
-      console.warn('Impossible de résoudre l\'URL de détection à partir de la fenêtre courante.', {
-        endpoint,
-        origin: window.location.origin,
-        error,
-      });
-    }
-  }
-
-  const expoHost = getExpoDevHost();
-  if (expoHost) {
-    const base = `http://${expoHost}`;
-    try {
-      return new URL(endpoint, base).toString();
-    } catch (error) {
-      console.warn("Impossible de résoudre l'URL de détection à partir de l'IP Expo détectée.", {
-        endpoint,
-        expoHost,
-        error,
-      });
-    }
-  }
-
-  return endpoint;
-};
-
-const getConfiguredEndpoint = () => {
-  const extra = Constants.expoConfig?.extra as
-    | { dartDetection?: { endpoint?: string }; dartDetectionUrl?: string }
-    | undefined;
-  const fromExtra = extra?.dartDetectionUrl ?? extra?.dartDetection?.endpoint;
-  const fromEnv = process.env.EXPO_PUBLIC_DART_DETECTION_URL;
-  return fromEnv ?? fromExtra ?? DEFAULT_ENDPOINT;
-};
-
-export const detectDarts = async (
-  base64Image: string,
-  options?: { signal?: AbortSignal }
-): Promise<DartDetectionResult[]> => {
-  const endpoint = getConfiguredEndpoint();
-  if (!endpoint) {
-    throw new DartDetectionError('Aucun endpoint de d\u00E9tection de fl\u00E9chettes n\'est configur\u00E9.');
-  }
-
-  const resolvedEndpoint = resolveEndpoint(endpoint);
-
-  console.log('Envoi de l\'image pour détection...', {
-    endpoint,
-    resolvedEndpoint,
-    imageSize: base64Image.length,
-  });
-
+export async function detectDarts(payload: DetectPayload, token?: string) {
   try {
-    const response = await fetch(resolvedEndpoint, {
+    const image = payload.image.replace(/^data:image\/\w+;base64,/, '');
+
+    const res = await fetchWithTimeout(DETECT_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({ image: toDataUri(base64Image) }),
-      signal: options?.signal,
-      cache: 'no-store',
+      headers: buildJsonHeaders(token),
+      body: JSON.stringify({ ...payload, image }),
+      timeoutMs: 25000,
     });
 
-    console.log('Réponse du serveur:', response.status, response.statusText);
-
-    if (!response.ok) {
-      const text = await response.text();
-      console.error('Erreur serveur:', text);
-      throw new DartDetectionError('\u00C9chec de la d\u00E9tection (HTTP ' + response.status + ')', text);
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new DartDetectionError(
+        `Le service a répondu ${res.status}. ${txt?.slice(0, 200) || ''}`.trim()
+      );
     }
 
-    const payload = await response.json();
-    console.log('Payload reçu:', payload);
-    const detections: unknown = payload?.detections ?? payload?.darts ?? payload?.results ?? payload;
+    const body = await res.json();
+    const detections: unknown = body?.detections ?? body?.darts ?? body?.results ?? body;
 
     if (!Array.isArray(detections)) {
-      console.log('Aucune détection trouvée');
       return [];
     }
 
-    const results = detections
+    return detections
       .map((item) => toDetectionResult(item as RawDartDetection))
       .filter((item): item is DartDetectionResult => Boolean(item));
-    
-    console.log('Détections traitées:', results.length);
-    return results;
-  } catch (error) {
-    console.error('Erreur lors de la détection:', error);
-    if (error instanceof DartDetectionError) {
-      throw error;
+  } catch (err: any) {
+    if (err?.name === 'AbortError') {
+      throw new DartDetectionError('Délai dépassé (timeout) lors de la détection.', err);
     }
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw error;
-    }
-    const networkErrors = new Set(['Failed to fetch', 'Network request failed']);
-    const reason =
-      error instanceof TypeError && networkErrors.has(error.message)
-        ? "Impossible de contacter le service de détection à l'URL " +
-          resolvedEndpoint +
-          ". Vérifiez votre connexion réseau ou mettez à jour la variable EXPO_PUBLIC_DART_DETECTION_URL pour pointer vers un service accessible."
-        : 'Impossible de contacter le service de détection.';
-
-    throw new DartDetectionError(reason, error);
+    throw new DartDetectionError(
+      `Impossible de contacter le service de détection à l'URL ${DETECT_URL}. Vérifiez le réseau / l’URL.`,
+      err
+    );
   }
-};
+}
