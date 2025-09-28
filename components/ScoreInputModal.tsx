@@ -71,7 +71,7 @@ export const ScoreInputModal: React.FC<ScoreInputModalProps> = ({
       <View style={styles.overlay}>
         <View style={styles.modal}>
           <View style={styles.header}>
-            <Target size={24} color="#00FF41" />
+            <Target size={24} color="#00FF41" style={styles.headerIcon} />
             <Text style={styles.title}>Saisir le résultat</Text>
           </View>
 
@@ -83,10 +83,10 @@ export const ScoreInputModal: React.FC<ScoreInputModalProps> = ({
                 onOpenAutoScoring();
               }}
             >
-              <Calculator size={20} color="#0F0F0F" />
+              <Calculator size={20} color="#0F0F0F" style={styles.autoScoringIcon} />
               <Text style={styles.autoScoringButtonText}>Comptage Automatique</Text>
             </TouchableOpacity>
-            
+
             <View style={styles.divider}>
               <View style={styles.dividerLine} />
               <Text style={styles.dividerText}>OU</Text>
@@ -142,7 +142,7 @@ export const ScoreInputModal: React.FC<ScoreInputModalProps> = ({
             </TouchableOpacity>
             
             <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-              <Trophy size={16} color="#0F0F0F" />
+              <Trophy size={16} color="#0F0F0F" style={styles.submitButtonIcon} />
               <Text style={styles.submitButtonText}>Valider</Text>
             </TouchableOpacity>
           </View>
@@ -172,8 +172,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     marginBottom: 20,
+  },
+  headerIcon: {
+    marginRight: 8,
   },
   title: {
     fontSize: 20,
@@ -190,8 +192,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#00FF41',
     paddingVertical: 16,
     borderRadius: 12,
-    gap: 8,
     marginBottom: 16,
+  },
+  autoScoringIcon: {
+    marginRight: 8,
   },
   autoScoringButtonText: {
     fontSize: 16,
@@ -201,7 +205,6 @@ const styles = StyleSheet.create({
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
   },
   dividerLine: {
     flex: 1,
@@ -212,6 +215,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666666',
     fontWeight: '600',
+    marginHorizontal: 12,
   },
   matchInfo: {
     alignItems: 'center',
@@ -276,7 +280,6 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: 'row',
-    gap: 12,
   },
   cancelButton: {
     flex: 1,
@@ -284,6 +287,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
+    marginRight: 6,
   },
   cancelButtonText: {
     fontSize: 16,
@@ -298,7 +302,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 6,
+    marginLeft: 6,
+  },
+  submitButtonIcon: {
+    marginRight: 6,
   },
   submitButtonText: {
     fontSize: 16,
