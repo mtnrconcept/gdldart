@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,11 +8,49 @@ import {
   TextInput,
   Modal,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Plus, Settings, Users, Trophy, Calendar, MapPin, Clock, Target, CreditCard as Edit, Trash2, Eye, Play } from 'lucide-react-native';
+import { Plus, Users, Trophy, Calendar, MapPin, Clock, Target, CreditCard as Edit, Trash2, Eye, Play, Globe } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { ScoringButton } from '@/components/ScoringButton';
+
+type TunnelStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'error';
+
+const TUNNEL_STATUS_LABELS: Record<TunnelStatus, string> = {
+  idle: 'Inactif',
+  connecting: 'Connexion...',
+  connected: 'Connecté',
+  reconnecting: 'Reconnexion...',
+  disconnected: 'Déconnecté',
+  error: 'Erreur',
+};
+
+const TUNNEL_STATUS_COLORS: Record<TunnelStatus, string> = {
+  idle: '#666666',
+  connecting: '#FFD700',
+  connected: '#00FF41',
+  reconnecting: '#FFD700',
+  disconnected: '#666666',
+  error: '#FF0041',
+};
+
+const createTunnelSessionId = () => {
+  try {
+    if (typeof globalThis.crypto !== 'undefined' && typeof globalThis.crypto.randomUUID === 'function') {
+      return globalThis.crypto.randomUUID();
+    }
+  } catch (error) {
+    console.warn('Impossible de générer un identifiant via crypto.randomUUID, utilisation du fallback.', error);
+  }
+
+  const randomPart = Math.random().toString(36).slice(2, 10);
+  const timePart = Date.now().toString(36);
+  return `tunnel-${timePart}-${randomPart}`;
+};
+
+const getTunnelStatusLabel = (status: TunnelStatus) => TUNNEL_STATUS_LABELS[status];
+const getTunnelStatusColor = (status: TunnelStatus) => TUNNEL_STATUS_COLORS[status];
 
 interface Tournament {
   id: string;
@@ -72,6 +110,133 @@ export default function AdminScreen() {
     maxParticipants: 16,
     description: '',
   });
+  const [tunnelStatus, setTunnelStatus] = useState<TunnelStatus>('disconnected');
+  const [isStartingTunnel, setIsStartingTunnel] = useState(false);
+  const [isStoppingTunnel, setIsStoppingTunnel] = useState(false);
+  const [tunnelUrl, setTunnelUrl] = useState<string | null>(null);
+  const [tunnelError, setTunnelError] = useState<string | null>(null);
+  const tunnelModuleRef = useRef<typeof import('@expo/ws-tunnel')>();
+  const isMountedRef = useRef(true);
+
+  const loadTunnelModule = async () => {
+    if (tunnelModuleRef.current) {
+      return tunnelModuleRef.current;
+    }
+
+    try {
+      const module = await import('@expo/ws-tunnel');
+      tunnelModuleRef.current = module;
+      return module;
+    } catch (error) {
+      const normalizedError = error instanceof Error ? error : new Error(String(error));
+      console.error('Impossible de charger le module @expo/ws-tunnel.', normalizedError);
+      throw new Error(`Le module @expo/ws-tunnel est indisponible : ${normalizedError.message}`);
+    }
+  };
+
+  const handleTunnelStatusChange = (status: Exclude<TunnelStatus, 'idle' | 'error'>) => {
+    if (!isMountedRef.current) {
+      return;
+    }
+
+    setTunnelStatus(status);
+
+    if (status === 'connected') {
+      setTunnelError(null);
+    }
+
+    if (status === 'disconnected') {
+      setTunnelUrl(null);
+    }
+  };
+
+  const startTunnel = async () => {
+    if (isStartingTunnel || isStoppingTunnel || tunnelStatus === 'connected') {
+      return;
+    }
+
+    setTunnelError(null);
+    setIsStartingTunnel(true);
+    setTunnelStatus('connecting');
+
+    const sessionId = createTunnelSessionId();
+
+    try {
+      const module = await loadTunnelModule();
+      const url = await module.startAsync({
+        session: sessionId,
+        onStatusChange: handleTunnelStatusChange,
+      });
+
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      setTunnelUrl(url);
+      setTunnelStatus('connected');
+    } catch (error) {
+      const normalizedError = error instanceof Error ? error : new Error(String(error));
+      console.error('Erreur lors de la création du tunnel.', normalizedError);
+
+      if (isMountedRef.current) {
+        setTunnelStatus('error');
+        setTunnelError(normalizedError.message);
+        Alert.alert(
+          'Erreur de tunnel',
+          "Impossible de créer le tunnel. Vérifiez votre connexion et réessayez.",
+          [{ text: 'OK' }]
+        );
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setIsStartingTunnel(false);
+      }
+    }
+  };
+
+  const stopTunnel = async () => {
+    if (isStoppingTunnel || (!tunnelUrl && tunnelStatus !== 'connected')) {
+      return;
+    }
+
+    setIsStoppingTunnel(true);
+
+    try {
+      const module = await loadTunnelModule();
+      await module.stopAsync();
+    } catch (error) {
+      const normalizedError = error instanceof Error ? error : new Error(String(error));
+      console.error('Erreur lors de la fermeture du tunnel.', normalizedError);
+
+      if (isMountedRef.current) {
+        setTunnelError(normalizedError.message);
+        Alert.alert(
+          'Erreur de tunnel',
+          "Impossible d'arrêter le tunnel. Veuillez réessayer.",
+          [{ text: 'OK' }]
+        );
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setIsStoppingTunnel(false);
+        setTunnelStatus('disconnected');
+        setTunnelUrl(null);
+        setTunnelError(null);
+      }
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      if (tunnelModuleRef.current) {
+        tunnelModuleRef.current.stopAsync().catch(() => undefined);
+      }
+    };
+  }, []);
+
+  const startDisabled = isStartingTunnel || isStoppingTunnel || tunnelStatus === 'connected';
+  const stopDisabled = !isStoppingTunnel && tunnelStatus !== 'connected';
 
   const resetForm = () => {
     setFormData({
@@ -238,6 +403,95 @@ export default function AdminScreen() {
           </Text>
           <Text style={styles.statLabel}>Actifs</Text>
         </View>
+      </View>
+
+      <View style={styles.tunnelCard}>
+        <View style={styles.tunnelHeader}>
+          <View style={styles.tunnelHeaderInfo}>
+            <View style={styles.tunnelHeaderTitleRow}>
+              <Globe size={18} color="#00FF41" />
+              <Text style={styles.tunnelTitle}>Tunnel de diffusion</Text>
+            </View>
+            <Text style={styles.tunnelSubtitle}>
+              Exposez temporairement votre service de détection ou de scoring local pour les arbitres
+              et spectateurs distants.
+            </Text>
+          </View>
+          <View
+            style={[
+              styles.tunnelStatusBadge,
+              { backgroundColor: getTunnelStatusColor(tunnelStatus) + '20' }
+            ]}
+          >
+            <Text
+              style={[
+                styles.tunnelStatusText,
+                { color: getTunnelStatusColor(tunnelStatus) }
+              ]}
+            >
+              {getTunnelStatusLabel(tunnelStatus)}
+            </Text>
+          </View>
+        </View>
+
+        {tunnelUrl ? (
+          <View style={styles.tunnelUrlContainer}>
+            <Text style={styles.tunnelUrlLabel}>URL publique</Text>
+            <Text style={styles.tunnelUrlValue} selectable numberOfLines={2}>
+              {tunnelUrl}
+            </Text>
+          </View>
+        ) : (
+          <Text style={styles.tunnelHint}>
+            Lancez un tunnel pour rendre votre API locale accessible durant un événement. La connexion
+            reste active tant que vous ne la fermez pas.
+          </Text>
+        )}
+
+        {tunnelError && (
+          <Text style={styles.tunnelError} numberOfLines={2}>
+            {tunnelError}
+          </Text>
+        )}
+
+        <View style={styles.tunnelActions}>
+          <TouchableOpacity
+            style={[
+              styles.tunnelPrimaryButton,
+              startDisabled && styles.tunnelButtonDisabled,
+            ]}
+            onPress={startTunnel}
+            disabled={startDisabled}
+          >
+            {isStartingTunnel ? (
+              <ActivityIndicator size="small" color="#0F0F0F" />
+            ) : (
+              <Text style={styles.tunnelPrimaryButtonText}>
+                {tunnelStatus === 'connected' ? 'Tunnel actif' : 'Créer un tunnel'}
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.tunnelSecondaryButton,
+              stopDisabled && styles.tunnelButtonDisabled,
+            ]}
+            onPress={stopTunnel}
+            disabled={stopDisabled}
+          >
+            {isStoppingTunnel ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.tunnelSecondaryButtonText}>Fermer</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.tunnelFootnote}>
+          Lorsque le tunnel est actif, mettez à jour la variable EXPO_PUBLIC_DART_DETECTION_URL avec
+          l'URL publique affichée ci-dessus.
+        </Text>
       </View>
 
       <ScrollView style={styles.tournamentsList} showsVerticalScrollIndicator={false}>
@@ -571,6 +825,122 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 12,
     color: '#666666',
+  },
+  tunnelCard: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    padding: 20,
+    backgroundColor: '#1F1F1F',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+  },
+  tunnelHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 16,
+  },
+  tunnelHeaderInfo: {
+    flex: 1,
+    gap: 8,
+  },
+  tunnelHeaderTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  tunnelTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  tunnelSubtitle: {
+    fontSize: 14,
+    color: '#999999',
+    lineHeight: 20,
+  },
+  tunnelStatusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#2A2A2A',
+  },
+  tunnelStatusText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  tunnelUrlContainer: {
+    backgroundColor: '#0F0F0F',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    marginBottom: 16,
+  },
+  tunnelUrlLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#666666',
+    marginBottom: 8,
+  },
+  tunnelUrlValue: {
+    fontSize: 14,
+    color: '#00FF41',
+  },
+  tunnelHint: {
+    fontSize: 14,
+    color: '#666666',
+    lineHeight: 20,
+  },
+  tunnelError: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#FF0041',
+  },
+  tunnelActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  tunnelPrimaryButton: {
+    flex: 1,
+    backgroundColor: '#00FF41',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+  },
+  tunnelPrimaryButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#0F0F0F',
+  },
+  tunnelSecondaryButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#2A2A2A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#3A3A3A',
+  },
+  tunnelSecondaryButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  tunnelButtonDisabled: {
+    opacity: 0.6,
+  },
+  tunnelFootnote: {
+    marginTop: 16,
+    fontSize: 12,
+    color: '#666666',
+    lineHeight: 18,
   },
   tournamentsList: {
     flex: 1,
