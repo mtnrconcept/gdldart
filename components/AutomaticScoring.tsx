@@ -625,7 +625,7 @@ const styles = StyleSheet.create({
   },
   cameraContainer: {
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingBottom: 30,
   },
   cameraButton: {
     flexDirection: 'row',
