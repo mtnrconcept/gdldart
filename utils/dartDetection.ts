@@ -82,13 +82,72 @@ const toDetectionResult = (detection: RawDartDetection): DartDetectionResult | n
 
 const isAbsoluteUrl = (value: string) => /^https?:\/\//i.test(value);
 
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
+
+const isLocalHostname = (value?: string) => {
+  if (!value) return false;
+  const lower = value.toLowerCase();
+  return LOCAL_HOSTNAMES.has(lower) || lower.endsWith('.localhost');
+};
+
+const getExpoDevHost = () => {
+  const expoGo = Constants.expoGoConfig as { debuggerHost?: string; hostUri?: string } | undefined;
+  const expoConfig = Constants.expoConfig as { hostUri?: string } | undefined;
+  const manifest = (Constants as unknown as { manifest?: { debuggerHost?: string; hostUri?: string } }).manifest;
+  const candidates = [
+    expoGo?.debuggerHost,
+    expoGo?.hostUri,
+    expoConfig?.hostUri,
+    manifest?.debuggerHost,
+    manifest?.hostUri,
+  ].filter(Boolean) as string[];
+
+  for (const candidate of candidates) {
+    const host = candidate.split('://').pop() ?? candidate;
+    const [hostname] = host.split(':');
+    if (hostname && !isLocalHostname(hostname)) {
+      return hostname;
+    }
+  }
+
+  return undefined;
+};
+
+const rewriteLocalhostUrl = (url: URL) => {
+  if (!isLocalHostname(url.hostname)) {
+    return url;
+  }
+
+  const expoHost = getExpoDevHost();
+  if (!expoHost) {
+    return url;
+  }
+
+  console.warn('Remplacement de l\'hôte "localhost" par l\'IP Expo détectée pour la détection.', {
+    original: url.hostname,
+    replacement: expoHost,
+  });
+
+  url.hostname = expoHost;
+  return url;
+};
+
 const resolveEndpoint = (endpoint: string) => {
   if (!endpoint) {
     return endpoint;
   }
 
   if (isAbsoluteUrl(endpoint)) {
-    return endpoint;
+    try {
+      const url = rewriteLocalhostUrl(new URL(endpoint));
+      return url.toString();
+    } catch (error) {
+      console.warn("Impossible d'analyser l'URL absolue fournie pour la détection.", {
+        endpoint,
+        error,
+      });
+      return endpoint;
+    }
   }
 
   if (typeof window !== 'undefined' && window.location) {
@@ -98,6 +157,20 @@ const resolveEndpoint = (endpoint: string) => {
       console.warn('Impossible de résoudre l\'URL de détection à partir de la fenêtre courante.', {
         endpoint,
         origin: window.location.origin,
+        error,
+      });
+    }
+  }
+
+  const expoHost = getExpoDevHost();
+  if (expoHost) {
+    const base = `http://${expoHost}`;
+    try {
+      return new URL(endpoint, base).toString();
+    } catch (error) {
+      console.warn("Impossible de résoudre l'URL de détection à partir de l'IP Expo détectée.", {
+        endpoint,
+        expoHost,
         error,
       });
     }
@@ -173,8 +246,9 @@ export const detectDarts = async (
     if (error instanceof Error && error.name === 'AbortError') {
       throw error;
     }
+    const networkErrors = new Set(['Failed to fetch', 'Network request failed']);
     const reason =
-      error instanceof TypeError && error.message === 'Failed to fetch'
+      error instanceof TypeError && networkErrors.has(error.message)
         ? "Impossible de contacter le service de détection à l'URL " +
           resolvedEndpoint +
           ". Vérifiez votre connexion réseau ou mettez à jour la variable EXPO_PUBLIC_DART_DETECTION_URL pour pointer vers un service accessible."
