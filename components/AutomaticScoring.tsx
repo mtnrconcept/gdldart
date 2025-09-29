@@ -404,10 +404,22 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
                         maxHeight: screenHeight > 700 ? 50 : 45,
                       }
                     ]}
+                      styles.scoreButton,
+                      {
+                        width: buttonWidth,
+                        minHeight: 40,
+                        maxHeight: screenHeight > 700 ? 50 : 45,
+                      }
+                    ]}
                     onPress={() => addScore(score)}
                     disabled={currentThrow >= 3}
                   >
                     <Text style={[
+                      styles.scoreButtonText,
+                      { fontSize: buttonWidth > 55 ? 16 : buttonWidth > 50 ? 14 : 12 }
+                    ]}>
+                      {score}
+                    </Text>
                       styles.scoreButtonText,
                       { fontSize: buttonWidth > 55 ? 16 : buttonWidth > 50 ? 14 : 12 }
                     ]}>
