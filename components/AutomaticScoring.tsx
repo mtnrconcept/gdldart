@@ -32,6 +32,20 @@ const getButtonsPerRow = () => {
   return Math.floor(availableWidth / minButtonWidth);
 };
 
+// Calculer la largeur des boutons de façon responsive
+const getButtonWidth = () => {
+  const availableWidth = screenWidth - 40; // 20px padding de chaque côté
+  const minButtonWidth = 45;
+  const buttonsPerRow = Math.floor(availableWidth / minButtonWidth);
+  return Math.min((availableWidth / buttonsPerRow) - 8, 60); // 8px pour les gaps, max 60px
+};
+
+const getButtonsPerRow = () => {
+  const availableWidth = screenWidth - 40;
+  const minButtonWidth = 45;
+  return Math.floor(availableWidth / minButtonWidth);
+};
+
 interface AutomaticScoringProps {
   visible: boolean;
   match: Match;
