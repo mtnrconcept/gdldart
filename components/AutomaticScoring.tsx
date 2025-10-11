@@ -46,6 +46,20 @@ const getButtonsPerRow = () => {
   return Math.floor(availableWidth / minButtonWidth);
 };
 
+// Calculer la largeur des boutons de façon responsive
+const getButtonWidth = () => {
+  const availableWidth = screenWidth - 40; // 20px padding de chaque côté
+  const minButtonWidth = 45;
+  const buttonsPerRow = Math.floor(availableWidth / minButtonWidth);
+  return Math.min((availableWidth / buttonsPerRow) - 8, 60); // 8px pour les gaps, max 60px
+};
+
+const getButtonsPerRow = () => {
+  const availableWidth = screenWidth - 40;
+  const minButtonWidth = 45;
+  return Math.floor(availableWidth / minButtonWidth);
+};
+
 interface AutomaticScoringProps {
   visible: boolean;
   match: Match;
@@ -404,10 +418,22 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
                         maxHeight: screenHeight > 700 ? 50 : 45,
                       }
                     ]}
+                      styles.scoreButton,
+                      {
+                        width: buttonWidth,
+                        minHeight: 40,
+                        maxHeight: screenHeight > 700 ? 50 : 45,
+                      }
+                    ]}
                     onPress={() => addScore(score)}
                     disabled={currentThrow >= 3}
                   >
                     <Text style={[
+                      styles.scoreButtonText,
+                      { fontSize: buttonWidth > 55 ? 16 : buttonWidth > 50 ? 14 : 12 }
+                    ]}>
+                      {score}
+                    </Text>
                       styles.scoreButtonText,
                       { fontSize: buttonWidth > 55 ? 16 : buttonWidth > 50 ? 14 : 12 }
                     ]}>
