@@ -9,7 +9,8 @@
     "build:web": "npx expo export --platform web",
     "lint": "eslint --ext .ts,.tsx .",
     "tunnel:darts": "npx localtunnel --port 8000 --print-requests",
-    "dev:tunnel": "npm run tunnel:darts"
+    "dev:tunnel": "npm run tunnel:darts",
+    "check-backend": "node scripts/check-backend.js"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",

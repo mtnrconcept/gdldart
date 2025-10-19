@@ -9,6 +9,8 @@ export class DartDetectionError extends Error {
 }
 
 const DEFAULT_ENDPOINT = 'https://deep-darts.fly.dev/api/detect';
+const REQUEST_TIMEOUT_MS = 30000;
+const MAX_RETRIES = 2;
 
 type ExtraConfig = Record<string, unknown> | undefined | null;
 
@@ -26,6 +28,7 @@ let cachedDetectUrl: string | null = null;
 
 function resolveDetectUrl(): string {
   if (cachedDetectUrl) {
+    console.log('[URL] Utilisation de l\'URL en cache:', cachedDetectUrl);
     return cachedDetectUrl;
   }
 
@@ -49,11 +52,11 @@ function resolveDetectUrl(): string {
     (isValidUrl(DEFAULT_ENDPOINT) ? DEFAULT_ENDPOINT : null);
 
   if (!resolved) {
-    throw new DartDetectionError(
-      `URL de détection invalide. Configure EXPO_PUBLIC_DART_DETECTION_URL (ex: http://192.168.0.18:8000/api/detect).`
-    );
+    const errorMsg = `URL de détection invalide. Configure EXPO_PUBLIC_DART_DETECTION_URL (ex: http://192.168.1.10:8000/api/detect).\n\nPour trouver l'IP de votre serveur:\n- Sur le serveur, exécutez: ipconfig (Windows) ou ifconfig (Mac/Linux)\n- Utilisez l'adresse IPv4 du réseau local\n- Assurez-vous que le serveur Python est démarré sur le port 8000`;
+    throw new DartDetectionError(errorMsg);
   }
 
+  console.log('[URL] URL de détection résolue:', resolved);
   cachedDetectUrl = resolved;
   return resolved;
 }
@@ -62,12 +65,17 @@ async function fetchWithTimeout(
   input: RequestInfo,
   init: RequestInit & { timeoutMs?: number } = {}
 ) {
-  const { timeoutMs = 25000, ...rest } = init;
+  const { timeoutMs = REQUEST_TIMEOUT_MS, ...rest } = init;
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(input, { ...rest, signal: ctrl.signal });
     return res;
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      throw new Error('timeout');
+    }
+    throw error;
   } finally {
     clearTimeout(t);
   }
@@ -155,53 +163,95 @@ export type DetectPayload = {
 };
 
 export async function detectDarts(payload: DetectPayload, token?: string) {
-  try {
-    const image = payload.image.replace(/^data:image\/\w+;base64,/, '');
+  let lastError: Error | null = null;
 
-    const detectUrl = resolveDetectUrl();
-
-    const res = await fetchWithTimeout(detectUrl, {
-      method: 'POST',
-      headers: buildJsonHeaders(token),
-      body: JSON.stringify({ ...payload, image }),
-      timeoutMs: 25000,
-    });
-
-    if (!res.ok) {
-      const txt = await res.text().catch(() => '');
-      throw new DartDetectionError(
-        `Le service a répondu ${res.status}. ${txt?.slice(0, 200) || ''}`.trim()
-      );
-    }
-
-    const body = await res.json();
-    const detections: unknown = body?.detections ?? body?.darts ?? body?.results ?? body;
-
-    if (!Array.isArray(detections)) {
-      return [];
-    }
-
-    return detections
-      .map((item) => toDetectionResult(item as RawDartDetection))
-      .filter((item): item is DartDetectionResult => Boolean(item));
-  } catch (err: any) {
-    if (err instanceof DartDetectionError) {
-      throw err;
-    }
-    if (err?.name === 'AbortError') {
-      throw new DartDetectionError('Délai dépassé (timeout) lors de la détection.', err);
-    }
-    let endpoint = 'inconnue';
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      endpoint = resolveDetectUrl();
-    } catch (resolutionError) {
-      if (resolutionError instanceof DartDetectionError) {
-        throw resolutionError;
+      const image = payload.image.replace(/^data:image\/\w+;base64,/, '');
+      const detectUrl = resolveDetectUrl();
+
+      if (attempt === 0) {
+        console.log('[API] Tentative de connexion au service:', detectUrl);
+      } else {
+        console.log(`[API] Nouvelle tentative ${attempt}/${MAX_RETRIES}...`);
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      }
+
+      const res = await fetchWithTimeout(detectUrl, {
+        method: 'POST',
+        headers: buildJsonHeaders(token),
+        body: JSON.stringify({ ...payload, image }),
+        timeoutMs: REQUEST_TIMEOUT_MS,
+      });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        const errorMsg = `Le service a répondu ${res.status}. ${txt?.slice(0, 200) || ''}`.trim();
+        console.error('[API] Erreur HTTP:', errorMsg);
+        throw new DartDetectionError(errorMsg);
+      }
+
+      console.log('[API] Réponse reçue avec succès');
+      const body = await res.json();
+      const detections: unknown = body?.detections ?? body?.darts ?? body?.results ?? body;
+
+      if (!Array.isArray(detections)) {
+        console.log('[API] Aucune détection dans la réponse');
+        return [];
+      }
+
+      console.log(`[API] ${detections.length} détection(s) trouvée(s)`);
+      return detections
+        .map((item) => toDetectionResult(item as RawDartDetection))
+        .filter((item): item is DartDetectionResult => Boolean(item));
+    } catch (err: any) {
+      lastError = err;
+
+      if (err instanceof DartDetectionError) {
+        if (attempt === MAX_RETRIES) {
+          throw err;
+        }
+        continue;
+      }
+
+      if (err?.message === 'timeout') {
+        console.error(`[API] Timeout tentative ${attempt + 1}/${MAX_RETRIES + 1}`);
+        if (attempt === MAX_RETRIES) {
+          throw new DartDetectionError(
+            `Délai dépassé après ${MAX_RETRIES + 1} tentatives. Le service met trop de temps à répondre. Vérifiez votre connexion réseau.`,
+            err
+          );
+        }
+        continue;
+      }
+
+      if (err?.message?.includes('Network request failed')) {
+        console.error(`[API] Erreur réseau tentative ${attempt + 1}/${MAX_RETRIES + 1}`);
+        if (attempt === MAX_RETRIES) {
+          let endpoint = 'inconnue';
+          try {
+            endpoint = resolveDetectUrl();
+          } catch (resolutionError) {
+            if (resolutionError instanceof DartDetectionError) {
+              throw resolutionError;
+            }
+          }
+          throw new DartDetectionError(
+            `Impossible de contacter le service à ${endpoint}.\n\nVérifications:\n1. Le serveur Python est-il démarré ?\n2. Votre téléphone est-il sur le même réseau WiFi ?\n3. L'URL est-elle correcte ?`,
+            err
+          );
+        }
+        continue;
+      }
+
+      if (attempt === MAX_RETRIES) {
+        throw new DartDetectionError(
+          `Erreur inattendue: ${err?.message || 'Erreur inconnue'}`,
+          err
+        );
       }
     }
-    throw new DartDetectionError(
-      `Impossible de contacter le service de détection à l'URL ${endpoint}. Vérifiez le réseau / l’URL.`,
-      err
-    );
   }
+
+  throw lastError || new DartDetectionError('Erreur inconnue lors de la détection');
 }
