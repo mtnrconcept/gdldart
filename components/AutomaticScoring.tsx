@@ -32,34 +32,6 @@ const getButtonsPerRow = () => {
   return Math.floor(availableWidth / minButtonWidth);
 };
 
-// Calculer la largeur des boutons de façon responsive
-const getButtonWidth = () => {
-  const availableWidth = screenWidth - 40; // 20px padding de chaque côté
-  const minButtonWidth = 45;
-  const buttonsPerRow = Math.floor(availableWidth / minButtonWidth);
-  return Math.min((availableWidth / buttonsPerRow) - 8, 60); // 8px pour les gaps, max 60px
-};
-
-const getButtonsPerRow = () => {
-  const availableWidth = screenWidth - 40;
-  const minButtonWidth = 45;
-  return Math.floor(availableWidth / minButtonWidth);
-};
-
-// Calculer la largeur des boutons de façon responsive
-const getButtonWidth = () => {
-  const availableWidth = screenWidth - 40; // 20px padding de chaque côté
-  const minButtonWidth = 45;
-  const buttonsPerRow = Math.floor(availableWidth / minButtonWidth);
-  return Math.min((availableWidth / buttonsPerRow) - 8, 60); // 8px pour les gaps, max 60px
-};
-
-const getButtonsPerRow = () => {
-  const availableWidth = screenWidth - 40;
-  const minButtonWidth = 45;
-  return Math.floor(availableWidth / minButtonWidth);
-};
-
 interface AutomaticScoringProps {
   visible: boolean;
   match: Match;
@@ -278,9 +250,6 @@ export const AutomaticScoring: React.FC<AutomaticScoringProps> = ({
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 25,
     22, 24, 26, 27, 28, 30, 32, 33, 34, 36, 38, 39, 40, 42, 45, 48, 50, 51, 54, 57, 60
   ];
-
-  const buttonWidth = getButtonWidth();
-  const buttonsPerRow = getButtonsPerRow();
 
   if (!match.player1 || !match.player2) return null;
 
@@ -533,23 +502,12 @@ const styles = StyleSheet.create({
   throwScore: { fontSize: 18, fontWeight: 'bold', color: '#FFFFFF' },
   turnTotal: { fontSize: 16, fontWeight: 'bold', color: '#00FF41' },
   scoreButtonsContainer: { padding: 20 },
-  scoreGrid: { 
-    flexDirection: 'row', 
-    flexWrap: 'wrap', 
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  scoreGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
   scoreButton: {
-    backgroundColor: '#1F1F1F', 
-    borderRadius: 8,
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    borderWidth: 1, 
-    borderColor: '#2A2A2A',
-    paddingHorizontal: 4,
-    paddingVertical: 8,
+    width: (screenWidth - 80) / 7, height: 50, backgroundColor: '#1F1F1F', borderRadius: 8,
+    alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#2A2A2A',
   },
-  scoreButtonText: { fontWeight: 'bold', color: '#FFFFFF', textAlign: 'center' },
+  scoreButtonText: { fontSize: 16, fontWeight: 'bold', color: '#FFFFFF' },
 
   footer: {
     position: 'absolute', left: 0, right: 0, bottom: 0,
